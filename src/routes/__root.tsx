@@ -1,0 +1,87 @@
+import {
+  HeadContent,
+  Link,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
+import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
+import { TanStackDevtools } from '@tanstack/react-devtools'
+
+import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
+
+import appCss from '../styles.css?url'
+
+import type { QueryClient } from '@tanstack/react-query'
+
+interface MyRouterContext {
+  queryClient: QueryClient
+}
+
+export const Route = createRootRouteWithContext<MyRouterContext>()({
+  head: () => ({
+    meta: [
+      {
+        charSet: 'utf-8',
+      },
+      {
+        name: 'viewport',
+        content: 'width=device-width, initial-scale=1',
+      },
+      {
+        title: 'Estate Tracker',
+      },
+    ],
+    links: [
+      {
+        rel: 'stylesheet',
+        href: appCss,
+      },
+    ],
+  }),
+  shellComponent: RootDocument,
+  component: RootLayout,
+})
+
+function RootLayout() {
+  return (
+    <div className="flex min-h-screen text-slate-900">
+      <aside className="w-64 shrink-0 border-r border-slate-200 bg-slate-50 p-4">
+        <Link to="/" className="block text-lg font-semibold">
+          Estate Tracker
+        </Link>
+        {/* ponytail: static placeholder — phase 02 renders projects + unread badges here */}
+        <p className="mt-6 text-sm text-slate-500">No projects yet</p>
+      </aside>
+      <main className="min-w-0 flex-1 p-8">
+        <Outlet />
+      </main>
+    </div>
+  )
+}
+
+function RootDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <TanStackDevtools
+          config={{
+            position: 'bottom-right',
+          }}
+          plugins={[
+            {
+              name: 'Tanstack Router',
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+            TanStackQueryDevtools,
+          ]}
+        />
+        <Scripts />
+      </body>
+    </html>
+  )
+}
