@@ -8,6 +8,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  // The client dep scan crawls route → server fn → fetch/browser → playwright, whose optional
+  // fsevents ships a native .node the optimizer chokes on. Server-only; never bundled anyway.
+  optimizeDeps: { exclude: ['playwright'] },
   plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
 })
 

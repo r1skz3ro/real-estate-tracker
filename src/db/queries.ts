@@ -1,4 +1,12 @@
-import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm'
+import {
+  and,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNull,
+  sql,
+} from 'drizzle-orm'
 import { db } from './index'
 import { events, links, listings, projects, runLinks, runs } from './schema'
 
@@ -170,4 +178,80 @@ export function updateListing(
 
 export function insertEvent(data: typeof events.$inferInsert) {
   db.insert(events).values(data).run()
+}
+
+// Runs newest-first with their events attached. A run with no events keeps an empty array on
+// purpose — the timeline renders it as the "no changes" line, and dropping it would make a quiet
+// week look like a broken app.
+export function listFindings(projectId: number, limit = 20, d = db) {
+  // limit + 1 answers "is there more?" without a second count query.
+  const page = d
+    .select()
+    .from(runs)
+    .where(eq(runs.projectId, projectId))
+    .orderBy(desc(runs.startedAt), desc(runs.id))
+    .limit(limit + 1)
+    .all()
+  const visible = page.slice(0, limit)
+  const runIds = visible.map((r) => r.id)
+
+  const rows = runIds.length
+    ? d
+        .select({
+          ...getTableColumns(events),
+          title: listings.title,
+          url: listings.url,
+          price: listings.price,
+          areaM2: listings.areaM2,
+          pricePerM2: listings.pricePerM2,
+          location: listings.location,
+          imageUrl: listings.imageUrl,
+          portal: links.portal,
+          label: links.label,
+        })
+        .from(events)
+        .innerJoin(listings, eq(listings.id, events.listingId))
+        .innerJoin(links, eq(links.id, events.linkId))
+        .where(inArray(events.runId, runIds))
+        .orderBy(events.id)
+        .all()
+    : []
+
+  const byRun = new Map<number, typeof rows>()
+  for (const row of rows) {
+    const bucket = byRun.get(row.runId)
+    if (bucket) bucket.push(row)
+    else byRun.set(row.runId, [row])
+  }
+
+  return {
+    runs: visible.map((run) => ({ ...run, events: byRun.get(run.id) ?? [] })),
+    hasMore: page.length > limit,
+  }
+}
+
+export function markRunRead(runId: number, d = db) {
+  d.update(events)
+    .set({ readAt: new Date() })
+    .where(and(eq(events.runId, runId), isNull(events.readAt)))
+    .run()
+}
+
+// events.linkId is denormalised precisely so this needs no join.
+export function markProjectRead(projectId: number, d = db) {
+  d.update(events)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        isNull(events.readAt),
+        inArray(
+          events.linkId,
+          d
+            .select({ id: links.id })
+            .from(links)
+            .where(eq(links.projectId, projectId)),
+        ),
+      ),
+    )
+    .run()
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { RefreshCw, X } from 'lucide-react'
 import {
@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Findings } from '@/components/findings'
 import { cn } from '@/lib/utils'
 import type { z } from 'zod'
 
@@ -90,6 +91,7 @@ const formSchema = updateProjectSchema.refine((v) => v.runAt1 !== v.runAt2, {
 function ProjectDetail() {
   const { project, links } = Route.useLoaderData()
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: standardSchemaResolver(formSchema),
@@ -133,10 +135,13 @@ function ProjectDetail() {
   const running = run.data?.run.status === 'running'
   const runLinks = new Map(run.data?.links.map((rl) => [rl.linkId, rl]) ?? [])
 
-  // The run rewrote every link's status, fetchMode and lastError — pull the loader back through.
+  // The run rewrote every link's status, fetchMode and lastError — pull the loader back through,
+  // and drop the run's new section into the timeline without a reload.
   useEffect(() => {
-    if (run.data && !running) void router.invalidate()
-  }, [run.data, running, router])
+    if (!run.data || running) return
+    void router.invalidate()
+    void queryClient.invalidateQueries({ queryKey: ['findings', project.id] })
+  }, [run.data, running, router, queryClient, project.id])
 
   const remove = useMutation({
     mutationFn: deleteProjectFn,
@@ -147,7 +152,7 @@ function ProjectDetail() {
   })
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <Card>
         <form onSubmit={form.handleSubmit((data) => save.mutate({ data }))}>
           <CardHeader>
@@ -342,6 +347,8 @@ function ProjectDetail() {
           )}
         </CardContent>
       </Card>
+
+      <Findings projectId={project.id} />
 
       <Card>
         <CardHeader>
