@@ -22,6 +22,8 @@ export type FetchResult = {
   status: number
   html: string
   blocked: boolean
+  // after redirects — a dead listing bounced to the site root is one of the removal signals
+  url: string
 }
 
 const CHALLENGE = /Request blocked|captcha|cf-browser-verification|DataDome/i
@@ -40,5 +42,5 @@ export async function httpFetch(url: string): Promise<FetchResult> {
   const blocked =
     [403, 429, 503].includes(res.status) ||
     (html.length < MAX_CHALLENGE_BYTES && CHALLENGE.test(html))
-  return { ok: res.ok, status: res.status, html, blocked }
+  return { ok: res.ok, status: res.status, html, blocked, url: res.url }
 }

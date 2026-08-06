@@ -25,12 +25,19 @@ async function getContext() {
 export async function browserFetch(url: string, waitFor?: string) {
   const page = await (await getContext()).newPage()
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 })
+    const res = await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: 45_000,
+    })
     if (waitFor)
       await page
         .waitForSelector(waitFor, { timeout: 15_000 })
         .catch(() => page.waitForTimeout(2_000))
-    return await page.content()
+    return {
+      html: await page.content(),
+      status: res?.status() ?? 0,
+      url: page.url(),
+    }
   } finally {
     // The page goes, the context stays — that is where the cookies live.
     await page.close()

@@ -13,8 +13,8 @@ actually pass before moving on.
 | 03 | [Links](./03-links.md) | Link CRUD, portal detection, 10-link cap | ✅ done |
 | 04 | [Fetch layer](./04-fetch-layer.md) | HTTP + Playwright fetch, throttle, escalation | ✅ done |
 | 05 | [Parsers](./05-parsers.md) | Five portal parsers + fixture tests | ✅ done |
-| 06 | [Diff engine](./06-diff-engine.md) | new / price-changed / removed detection | ⬜ next |
-| 07 | [Run orchestration](./07-run-orchestration.md) | Background refresh job + live progress | ⬜ |
+| 06 | [Diff engine](./06-diff-engine.md) | new / price-changed / removed detection | ✅ done |
+| 07 | [Run orchestration](./07-run-orchestration.md) | Background refresh job + live progress | ⬜ next |
 | 08 | [Findings UI](./08-findings-ui.md) | Timeline of refresh batches, listing cards | ⬜ |
 | 09 | [Scheduler](./09-scheduler.md) | node-cron, per-project times, catch-up, prune | ⬜ |
 | 10 | [Hardening](./10-hardening.md) | Error surfacing, README, notify seam | ⬜ |

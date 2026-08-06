@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { deriveLabel, detectPortal } from './portals'
+import { deriveLabel, detectPortal, pageUrl } from './portals'
 
 // The five URLs from phase 03's "Done when", verbatim.
 const EXAMPLES = [
@@ -34,6 +34,66 @@ const EXAMPLES = [
 test.each(EXAMPLES)('%s', (url, portal, label) => {
   expect(detectPortal(url)).toBe(portal)
   expect(deriveLabel(portal, url)).toBe(label)
+})
+
+// Every expectation below was read off the live portals (`rel="next"`, or the pagination block in
+// the phase 05 fixtures) — none of these shapes is guessed.
+test.each([
+  [
+    'otodom',
+    'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski',
+    'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski?page=2',
+  ],
+  [
+    'gratka',
+    'https://gratka.pl/mapa/nieruchomosci/dzialki-grunty?sort=newest',
+    'https://gratka.pl/mapa/nieruchomosci/dzialki-grunty?sort=newest&page=2',
+  ],
+  [
+    'olx',
+    'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
+    'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/?page=2',
+  ],
+  // A saved search URL may already be on a page; replace it rather than append a second one.
+  [
+    'olx',
+    'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/?page=5',
+    'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/?page=2',
+  ],
+  // Positional query string: URLSearchParams would re-encode it into `?3%2Cdzialka%2C…=&p=2`.
+  [
+    'nieruchomosci-online',
+    'https://wroclaw.nieruchomosci-online.pl/szukaj.html?3,dzialka,sprzedaz,,Sulistrowiczki:44767,,,25,-250000,,,,,,,,,,,,,,1',
+    'https://wroclaw.nieruchomosci-online.pl/szukaj.html?3,dzialka,sprzedaz,,Sulistrowiczki:44767,,,25,-250000,,,,,,,,,,,,,,1&p=2',
+  ],
+  [
+    'nieruchomosci-online',
+    'https://wroclaw.nieruchomosci-online.pl/szukaj.html',
+    'https://wroclaw.nieruchomosci-online.pl/szukaj.html?p=2',
+  ],
+  // adresowo hides the page inside its filter token.
+  [
+    'adresowo',
+    'https://adresowo.pl/f/dzialki/sulistrowice/g5_lod',
+    'https://adresowo.pl/f/dzialki/sulistrowice/g5_l2od',
+  ],
+  [
+    'adresowo',
+    'https://adresowo.pl/dzialki/wroclaw/',
+    'https://adresowo.pl/dzialki/wroclaw/_l2',
+  ],
+] as const)('pageUrl %s', (portal, url, expected) => {
+  expect(pageUrl(portal, url, 2)).toBe(expected)
+})
+
+test('adresowo pages past the second keep the same token', () => {
+  expect(
+    pageUrl('adresowo', 'https://adresowo.pl/f/dzialki/wroclaw/g5_l2od', 3),
+  ).toBe('https://adresowo.pl/f/dzialki/wroclaw/g5_l3od')
+})
+
+test('pageUrl gives up on a url it cannot parse', () => {
+  expect(pageUrl('gratka', 'not a url', 2)).toBeNull()
 })
 
 test('matches on hostname, not substring', () => {

@@ -34,6 +34,17 @@ export type Portal = keyof typeof PORTALS
 
 export const PORTAL_NAMES = Object.keys(PORTALS) as Array<Portal>
 
+// What a listing's own detail page says once the listing is gone, recorded from live dead pages the
+// same way phase 05 recorded the empty states. Only the portals that need one appear here: gratka
+// answers a dead id with a real 404, and nobody has seen an expired adresowo or OLX page yet — those
+// two ride the HTTP status plus the shared wording fallback in `verifyRemoved` until one turns up.
+export const EXPIRED_MARKERS: Partial<Record<Portal, RegExp>> = {
+  // Soft 404: HTTP 200 with an error page in the body.
+  'nieruchomosci-online': /<title>Strona błędu 404/,
+  // Live ads carry `"shouldShowExpiredAdPage":null` alongside `"status":"active"`.
+  otodom: /"shouldShowExpiredAdPage":\s*true/,
+}
+
 // Matched against the parsed hostname, never a substring: nieruchomosci-online.pl.evil.com must not
 // match, wroclaw.nieruchomosci-online.pl must.
 export function detectPortal(url: string): Portal | null {
@@ -44,6 +55,39 @@ export function detectPortal(url: string): Portal | null {
     return null
   }
   return PORTAL_NAMES.find((p) => PORTALS[p].host.test(hostname)) ?? null
+}
+
+// Page-N URL shapes, all verified against the live portals. Three take a plain `page` query param;
+// the other two do not:
+//   - nieruchomosci-online's query string is positional (`?3,dzialka,sprzedaz,,Sulistrowiczki:44767,…`),
+//     so URLSearchParams would re-encode it into `?3%2Cdzialka%2C…=&p=2` — append the raw string.
+//   - adresowo encodes the page inside its filter token: `g5_lod` → `g5_l2od` → `g5_l3od`, and with
+//     no filters at all `/dzialki/wroclaw/` → `/dzialki/wroclaw/_l2`.
+export function pageUrl(
+  portal: Portal,
+  url: string,
+  page: number,
+): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+
+  if (portal === 'nieruchomosci-online')
+    return `${url}${parsed.search ? '&' : '?'}p=${page}`
+
+  if (portal === 'adresowo') {
+    parsed.pathname = /_l\d*/.test(parsed.pathname)
+      ? parsed.pathname.replace(/_l\d*/, `_l${page}`)
+      : `${parsed.pathname.replace(/\/$/, '')}/_l${page}`
+    return parsed.toString()
+  }
+
+  // set, not append: a saved search URL may already carry a page.
+  parsed.searchParams.set('page', String(page))
+  return parsed.toString()
 }
 
 // Path words that carry no location information, so we keep walking backwards past them.
