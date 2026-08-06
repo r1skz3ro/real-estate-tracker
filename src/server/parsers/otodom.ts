@@ -43,7 +43,9 @@ export const parseOtodom: Parser = (html, pageUrl) => {
 
   const listings = items.map((item) => {
     const { street, city, province } = item.location.address
-    const location = [street?.name, city?.name, province?.name].filter(Boolean).join(', ') || null
+    const location =
+      [street?.name, city?.name, province?.name].filter(Boolean).join(', ') ||
+      null
 
     return {
       externalId: String(item.id),

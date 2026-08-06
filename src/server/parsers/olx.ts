@@ -17,15 +17,20 @@ export const parseOlx: Parser = (html, pageUrl) => {
       const url = new URL(href, pageUrl)
       // OLX pads a search with offers from outside it — a wider radius, or, when nothing matched at
       // all, whatever the visitor browsed last. Both are marked by `reason`; neither is a result.
-      if (url.searchParams.get('reason')?.startsWith('extended_search')) return null
+      if (url.searchParams.get('reason')?.startsWith('extended_search'))
+        return null
       url.search = ''
 
-      const externalId = href.match(EXTERNAL_ID_RE)?.[1] ?? card.attr('id') ?? href
+      const externalId =
+        href.match(EXTERNAL_ID_RE)?.[1] ?? card.attr('id') ?? href
 
       const priceText = card.find('[data-testid="ad-price"]').first().text()
       const price = parsePlNumber(priceText.match(PRICE_RE)?.[1] ?? '')
 
-      const locationDate = card.find('[data-testid="location-date"]').first().text()
+      const locationDate = card
+        .find('[data-testid="location-date"]')
+        .first()
+        .text()
       const location = locationDate.split(' - ')[0]?.trim() || null
 
       const image = card
@@ -48,7 +53,11 @@ export const parseOlx: Parser = (html, pageUrl) => {
     })
     .toArray()
 
-  const total = parsePlNumber($('[data-testid="total-count"]').text().match(/[\d\s]+/)?.[0] ?? '')
+  const total = parsePlNumber(
+    $('[data-testid="total-count"]')
+      .text()
+      .match(/[\d\s]+/)?.[0] ?? '',
+  )
 
   return { listings, emptyState: total === 0 }
 }

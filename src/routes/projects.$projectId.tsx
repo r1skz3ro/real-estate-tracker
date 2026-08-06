@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { X } from 'lucide-react'
 import {
   MAX_LINKS,
   addLinkFn,
@@ -15,6 +16,31 @@ import {
   updateProjectFn,
   updateProjectSchema,
 } from '../server/projects'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import type { z } from 'zod'
 
 export const Route = createFileRoute('/projects/$projectId')({
@@ -30,8 +56,8 @@ export const Route = createFileRoute('/projects/$projectId')({
 
 // Grey until phases 07/10 give the dot real meaning.
 const STATUS_DOT: Record<string, string> = {
-  pending: 'bg-slate-300',
-  ok: 'bg-green-500',
+  pending: 'bg-muted-foreground/40',
+  ok: 'bg-emerald-500',
   error: 'bg-red-500',
 }
 
@@ -81,166 +107,205 @@ function ProjectDetail() {
   })
 
   return (
-    <div className="max-w-2xl">
-      <form
-        className="space-y-4"
-        onSubmit={form.handleSubmit((data) => save.mutate({ data }))}
-      >
-        <input
-          {...form.register('name')}
-          maxLength={80}
-          aria-label="Project name"
-          className="w-full rounded border border-slate-300 px-3 py-2 text-2xl font-semibold"
-        />
-        {errors.name && (
-          <p className="text-sm text-red-600">{errors.name.message}</p>
-        )}
-
-        <div className="flex items-end gap-4">
-          <label className="text-sm">
-            <span className="block text-slate-600">Refresh at</span>
-            <input
-              type="time"
-              {...form.register('runAt1')}
-              className="mt-1 rounded border border-slate-300 px-3 py-2"
+    <div className="max-w-2xl space-y-6">
+      <Card>
+        <form onSubmit={form.handleSubmit((data) => save.mutate({ data }))}>
+          <CardHeader>
+            <Input
+              {...form.register('name')}
+              maxLength={80}
+              aria-label="Project name"
+              className="h-auto border-transparent bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight hover:border-input md:text-2xl dark:bg-transparent"
             />
-          </label>
-          <label className="text-sm">
-            <span className="block text-slate-600">and at</span>
-            <input
-              type="time"
-              {...form.register('runAt2')}
-              className="mt-1 rounded border border-slate-300 px-3 py-2"
-            />
-          </label>
-        </div>
-        {(errors.runAt1 ?? errors.runAt2) && (
-          <p className="text-sm text-red-600">
-            {errors.runAt1?.message ?? errors.runAt2?.message}
-          </p>
-        )}
-        <p className="text-sm text-slate-500">Times are Europe/Warsaw.</p>
+            {errors.name && (
+              <p className="px-2 text-sm text-destructive">
+                {errors.name.message}
+              </p>
+            )}
+          </CardHeader>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={save.isPending}
-            className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-          >
-            Save
-          </button>
-          {save.isSuccess && (
-            <span className="text-sm text-green-700">Saved</span>
-          )}
-          {save.error && (
-            <span className="text-sm text-red-600">{save.error.message}</span>
-          )}
-        </div>
-      </form>
+          <CardContent className="mt-2 space-y-2">
+            <div className="flex items-end gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="runAt1">Refresh at</Label>
+                <Input
+                  id="runAt1"
+                  type="time"
+                  {...form.register('runAt1')}
+                  className="w-auto tabular-nums"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="runAt2">and at</Label>
+                <Input
+                  id="runAt2"
+                  type="time"
+                  {...form.register('runAt2')}
+                  className="w-auto tabular-nums"
+                />
+              </div>
+            </div>
+            {(errors.runAt1 ?? errors.runAt2) && (
+              <p className="text-sm text-destructive">
+                {errors.runAt1?.message ?? errors.runAt2?.message}
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Times are Europe/Warsaw.
+            </p>
+          </CardContent>
 
-      <hr className="my-8 border-slate-200" />
-
-      <h2 className="font-semibold">Search links</h2>
-
-      {links.length > 0 && (
-        <ul className="mt-3 divide-y divide-slate-200 rounded border border-slate-200">
-          {links.map((link) => (
-            <li key={link.id} className="flex items-center gap-2 px-3 py-2">
-              <span
-                title={link.status}
-                className={`size-2 shrink-0 rounded-full ${STATUS_DOT[link.status] ?? 'bg-slate-300'}`}
-              />
-              <input
-                defaultValue={link.label}
-                aria-label="Link label"
-                maxLength={80}
-                onBlur={(e) => {
-                  const label = e.target.value.trim()
-                  if (label && label !== link.label)
-                    renameLink.mutate({ data: { id: link.id, label } })
-                  else e.target.value = link.label
-                }}
-                className="min-w-0 flex-1 rounded border border-transparent px-1 py-0.5 hover:border-slate-300 focus:border-slate-400 focus:outline-none"
-              />
-              <a
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                title={link.url}
-                className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-200"
-              >
-                {link.portal}
-              </a>
-              {link.fetchMode === 'browser' && (
-                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                  browser
-                </span>
-              )}
-              <button
-                type="button"
-                aria-label={`Remove ${link.label}`}
-                disabled={removeLink.isPending}
-                onClick={() => removeLink.mutate({ data: link.id })}
-                className="px-1 text-slate-400 hover:text-red-600 disabled:opacity-50"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {atCap ? (
-        <p className="mt-3 text-sm text-slate-600">
-          {MAX_LINKS} of {MAX_LINKS} links — remove one to add another.
-        </p>
-      ) : (
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={linkForm.handleSubmit(({ url }) =>
-            addLink.mutate(
-              { data: { projectId: project.id, url } },
-              { onSuccess: () => linkForm.reset() },
-            ),
-          )}
-        >
-          <input
-            {...linkForm.register('url', {
-              required: true,
-              setValueAs: (v: string) => v.trim(),
-            })}
-            type="url"
-            placeholder="Paste a search URL from OLX, Otodom, Gratka, Adresowo or Nieruchomosci-Online"
-            className="min-w-0 flex-1 rounded border border-slate-300 px-3 py-2"
-          />
-          <button
-            type="submit"
-            disabled={addLink.isPending}
-            className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-          >
-            Add
-          </button>
+          <CardFooter className="gap-3">
+            <Button type="submit" disabled={save.isPending}>
+              Save
+            </Button>
+            {save.isSuccess && (
+              <span className="text-sm text-emerald-400">Saved</span>
+            )}
+            {save.error && (
+              <span className="text-sm text-destructive">
+                {save.error.message}
+              </span>
+            )}
+          </CardFooter>
         </form>
-      )}
-      {addLink.error && (
-        <p className="mt-2 text-sm text-red-600">{addLink.error.message}</p>
-      )}
+      </Card>
 
-      <hr className="my-8 border-slate-200" />
+      <Card>
+        <CardHeader>
+          <CardTitle>Search links</CardTitle>
+          <CardDescription>
+            {links.length} of {MAX_LINKS} saved searches.
+          </CardDescription>
+        </CardHeader>
 
-      <button
-        type="button"
-        disabled={remove.isPending}
-        onClick={() => {
-          if (
-            confirm(`Delete "${project.name}" and all its links and history?`)
-          )
-            remove.mutate({ data: project.id })
-        }}
-        className="rounded border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50 disabled:opacity-50"
-      >
-        Delete project
-      </button>
+        {links.length > 0 && (
+          <ul className="divide-y divide-border border-y border-border">
+            {links.map((link) => (
+              <li
+                key={link.id}
+                className="flex items-center gap-2 px-4 py-2 transition-colors hover:bg-accent/30"
+              >
+                <span
+                  title={link.status}
+                  className={cn(
+                    'size-2 shrink-0 rounded-full',
+                    STATUS_DOT[link.status] ?? 'bg-muted-foreground/40',
+                  )}
+                />
+                <Input
+                  defaultValue={link.label}
+                  aria-label="Link label"
+                  maxLength={80}
+                  onBlur={(e) => {
+                    const label = e.target.value.trim()
+                    if (label && label !== link.label)
+                      renameLink.mutate({ data: { id: link.id, label } })
+                    else e.target.value = link.label
+                  }}
+                  className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-1.5 text-sm hover:border-input md:text-sm dark:bg-transparent"
+                />
+                <Badge asChild variant="secondary">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={link.url}
+                  >
+                    {link.portal}
+                  </a>
+                </Badge>
+                {link.fetchMode === 'browser' && (
+                  <Badge variant="outline" className="text-amber-400">
+                    browser
+                  </Badge>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove ${link.label}`}
+                  disabled={removeLink.isPending}
+                  onClick={() => removeLink.mutate({ data: link.id })}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <X />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <CardContent className="space-y-2">
+          {atCap ? (
+            <p className="text-sm text-muted-foreground">
+              {MAX_LINKS} of {MAX_LINKS} links — remove one to add another.
+            </p>
+          ) : (
+            <form
+              className="flex gap-2"
+              onSubmit={linkForm.handleSubmit(({ url }) =>
+                addLink.mutate(
+                  { data: { projectId: project.id, url } },
+                  { onSuccess: () => linkForm.reset() },
+                ),
+              )}
+            >
+              <Input
+                {...linkForm.register('url', {
+                  required: true,
+                  setValueAs: (v: string) => v.trim(),
+                })}
+                type="url"
+                placeholder="Paste a search URL from OLX, Otodom, Gratka, Adresowo or Nieruchomosci-Online"
+              />
+              <Button type="submit" disabled={addLink.isPending}>
+                Add
+              </Button>
+            </form>
+          )}
+          {addLink.error && (
+            <p className="text-sm text-destructive">{addLink.error.message}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Danger zone</CardTitle>
+          <CardDescription>
+            Deleting a project removes its links and all history.
+          </CardDescription>
+          <CardAction>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={remove.isPending}>
+                  Delete project
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes the project, its {links.length} search{' '}
+                    {links.length === 1 ? 'link' : 'links'} and all recorded
+                    history. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={() => remove.mutate({ data: project.id })}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardAction>
+        </CardHeader>
+      </Card>
     </div>
   )
 }

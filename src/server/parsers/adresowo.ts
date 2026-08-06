@@ -37,12 +37,16 @@ export const parseAdresowo: Parser = (html, pageUrl) => {
         if (!match) return
         const value = parsePlNumber(match[1] ?? '')
         if (match[2] === 'zł') price = value
-        else areaM2 = match[2] === 'ha' && value !== null ? value * M2_PER_HA : value
+        else
+          areaM2 =
+            match[2] === 'ha' && value !== null ? value * M2_PER_HA : value
       })
 
       const spans = anchor.children('span')
       const location =
-        [spans.eq(1).text().trim(), spans.eq(2).text().trim()].filter(Boolean).join(', ') || null
+        [spans.eq(1).text().trim(), spans.eq(2).text().trim()]
+          .filter(Boolean)
+          .join(', ') || null
 
       const image = card.find('picture img[src]').first()
 
@@ -62,5 +66,8 @@ export const parseAdresowo: Parser = (html, pageUrl) => {
 
   // ponytail: adresowo publishes no "no results" wording — it widens the search instead — so the
   // honest signal is its results grid rendering empty. Swap for the real marker if one ever appears.
-  return { listings, emptyState: $(RESULTS).length > 0 && listings.length === 0 }
+  return {
+    listings,
+    emptyState: $(RESULTS).length > 0 && listings.length === 0,
+  }
 }

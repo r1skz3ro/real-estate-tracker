@@ -25,7 +25,10 @@ export function parsePlNumber(s: string): number | null {
   return Number.isNaN(n) ? null : n
 }
 
-export function derivePricePerM2(price: number | null, areaM2: number | null): number | null {
+export function derivePricePerM2(
+  price: number | null,
+  areaM2: number | null,
+): number | null {
   if (price === null || areaM2 === null || areaM2 <= 0) return null
   return price / areaM2
 }
@@ -34,7 +37,8 @@ export function absoluteUrl(href: string, pageUrl: string): string {
   return new URL(href, pageUrl).toString()
 }
 
-const LD_JSON_RE = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g
+const LD_JSON_RE =
+  /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g
 
 export function findLdJson<T>(html: string, type: string): T | undefined {
   for (const [, block] of html.matchAll(LD_JSON_RE)) {

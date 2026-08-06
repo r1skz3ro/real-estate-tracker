@@ -41,11 +41,16 @@ export const parseNieruchomosciOnline: Parser = (html) => {
       price: parsePlNumber(offer.price),
       currency: 'PLN',
       areaM2,
-      pricePerM2: offer.priceSpecification ? parsePlNumber(offer.priceSpecification.price) : null,
+      pricePerM2: offer.priceSpecification
+        ? parsePlNumber(offer.priceSpecification.price)
+        : null,
       location: offer.itemOffered?.address?.addressLocality ?? null,
       imageUrl: offer.image ?? null,
     }
   })
 
-  return { listings, emptyState: collectionPage !== undefined && listings.length === 0 }
+  return {
+    listings,
+    emptyState: collectionPage !== undefined && listings.length === 0,
+  }
 }

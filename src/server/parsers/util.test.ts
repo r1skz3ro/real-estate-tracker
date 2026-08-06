@@ -27,8 +27,10 @@ test.each([
 })
 
 test('absoluteUrl resolves relative hrefs against the page url', () => {
-  expect(absoluteUrl('/o/slug', 'https://adresowo.pl/f/dzialki')).toBe('https://adresowo.pl/o/slug')
-  expect(absoluteUrl('https://otodom.pl/pl/ad/x', 'https://otodom.pl/pl/wyniki')).toBe(
-    'https://otodom.pl/pl/ad/x',
+  expect(absoluteUrl('/o/slug', 'https://adresowo.pl/f/dzialki')).toBe(
+    'https://adresowo.pl/o/slug',
   )
+  expect(
+    absoluteUrl('https://otodom.pl/pl/ad/x', 'https://otodom.pl/pl/wyniki'),
+  ).toBe('https://otodom.pl/pl/ad/x')
 })

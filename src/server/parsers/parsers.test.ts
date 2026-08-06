@@ -54,13 +54,15 @@ const CASES: Array<{
   {
     portal: 'olx',
     parser: parseOlx,
-    pageUrl: 'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
+    pageUrl:
+      'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
     expectedCount: 10,
     firstId: '1bB3GO',
   },
 ]
 
-const read = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, `${name}.html`), 'utf-8')
+const read = (name: string) =>
+  fs.readFileSync(path.join(FIXTURES_DIR, `${name}.html`), 'utf-8')
 
 test.each(CASES)(
   '$portal parses the expected listings from the search fixture',
@@ -78,7 +80,9 @@ test.each(CASES)(
       expect(detectPortal(listing.url)).toBe(portal)
     }
 
-    const withPrice = listings.filter((listing) => listing.price !== null).length
+    const withPrice = listings.filter(
+      (listing) => listing.price !== null,
+    ).length
     expect(withPrice / listings.length).toBeGreaterThanOrEqual(0.8)
 
     const ids = new Set(listings.map((listing) => listing.externalId))
@@ -96,9 +100,15 @@ test.each(CASES)(
   },
 )
 
-test.each(CASES)('$portal treats an unparseable page as an error, not as empty', ({ parser, pageUrl }) => {
-  const { listings, emptyState } = parser('<html><body>nope</body></html>', pageUrl)
+test.each(CASES)(
+  '$portal treats an unparseable page as an error, not as empty',
+  ({ parser, pageUrl }) => {
+    const { listings, emptyState } = parser(
+      '<html><body>nope</body></html>',
+      pageUrl,
+    )
 
-  expect(listings).toHaveLength(0)
-  expect(emptyState).toBe(false)
-})
+    expect(listings).toHaveLength(0)
+    expect(emptyState).toBe(false)
+  },
+)

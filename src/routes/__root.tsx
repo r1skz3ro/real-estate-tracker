@@ -10,6 +10,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { listProjectsFn } from '../server/projects'
+import { Badge } from '@/components/ui/badge'
 
 import appCss from '../styles.css?url'
 
@@ -51,29 +52,32 @@ function RootLayout() {
   const projects = Route.useLoaderData()
 
   return (
-    <div className="flex min-h-screen text-slate-900">
-      <aside className="w-64 shrink-0 border-r border-slate-200 bg-slate-50 p-4">
-        <Link to="/" className="block text-lg font-semibold">
+    <div className="flex min-h-screen">
+      <aside className="w-64 shrink-0 border-r border-border bg-card p-4">
+        <Link
+          to="/"
+          className="block px-2 text-lg font-semibold tracking-tight"
+        >
           Estate Tracker
         </Link>
         {projects.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-500">No projects yet</p>
+          <p className="mt-6 px-2 text-sm text-muted-foreground">
+            No projects yet
+          </p>
         ) : (
-          <nav className="mt-6 space-y-1">
+          <nav className="mt-6 space-y-0.5">
             {projects.map((project) => (
               <Link
                 key={project.id}
                 to="/projects/$projectId"
                 params={{ projectId: String(project.id) }}
-                activeProps={{ className: 'bg-slate-200 font-medium' }}
-                className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-100"
+                activeProps={{
+                  className: 'bg-accent text-accent-foreground font-medium',
+                }}
+                className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
               >
                 <span className="truncate">{project.name}</span>
-                {project.unread > 0 && (
-                  <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs font-medium text-white">
-                    {project.unread}
-                  </span>
-                )}
+                {project.unread > 0 && <Badge>{project.unread}</Badge>}
               </Link>
             ))}
           </nav>
@@ -88,7 +92,7 @@ function RootLayout() {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>

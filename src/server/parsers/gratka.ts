@@ -47,5 +47,8 @@ export const parseGratka: Parser = (html) => {
     }
   })
 
-  return { listings, emptyState: product !== undefined && listings.length === 0 }
+  return {
+    listings,
+    emptyState: product !== undefined && listings.length === 0,
+  }
 }

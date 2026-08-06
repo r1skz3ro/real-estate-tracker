@@ -8,6 +8,9 @@ import {
   useRouter,
 } from '@tanstack/react-router'
 import { createProjectFn, createProjectSchema } from '../server/projects'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import type { z } from 'zod'
 
 export const Route = createFileRoute('/')({ component: Home })
@@ -36,49 +39,46 @@ function Home() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-semibold">Projects</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
 
       {projects.length === 0 ? (
-        <p className="mt-2 text-slate-600">No projects yet</p>
+        <p className="mt-2 text-sm text-muted-foreground">No projects yet</p>
       ) : (
-        <ul className="mt-4 divide-y divide-slate-200 rounded border border-slate-200">
-          {projects.map((project) => (
-            <li key={project.id}>
-              <Link
-                to="/projects/$projectId"
-                params={{ projectId: String(project.id) }}
-                className="flex items-center justify-between px-4 py-3 hover:bg-slate-50"
-              >
-                <span className="font-medium">{project.name}</span>
-                <span className="text-sm text-slate-500">
-                  {project.runAt1} · {project.runAt2}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <Card className="mt-4 gap-0 py-0">
+          <ul className="divide-y divide-border">
+            {projects.map((project) => (
+              <li key={project.id}>
+                <Link
+                  to="/projects/$projectId"
+                  params={{ projectId: String(project.id) }}
+                  className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-accent/50"
+                >
+                  <span className="font-medium">{project.name}</span>
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {project.runAt1} · {project.runAt2}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       <form
         className="mt-6 flex gap-2"
         onSubmit={form.handleSubmit((data) => create.mutate({ data }))}
       >
-        <input
+        <Input
           {...form.register('name', { setValueAs: (v: string) => v.trim() })}
           placeholder="New project name"
           maxLength={80}
-          className="flex-1 rounded border border-slate-300 px-3 py-2"
         />
-        <button
-          type="submit"
-          disabled={create.isPending}
-          className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-        >
+        <Button type="submit" disabled={create.isPending}>
           Create
-        </button>
+        </Button>
       </form>
       {(form.formState.errors.name ?? create.error) && (
-        <p className="mt-2 text-sm text-red-600">
+        <p className="mt-2 text-sm text-destructive">
           {form.formState.errors.name?.message ?? create.error?.message}
         </p>
       )}
