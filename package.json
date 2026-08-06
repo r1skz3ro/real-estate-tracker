@@ -19,6 +19,7 @@
     "db:migrate": "mkdir -p data && drizzle-kit migrate"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.7.1",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "latest",
@@ -34,6 +35,7 @@
     "playwright": "^1.62.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-hook-form": "^7.84.0",
     "tailwindcss": "^4.1.18",
     "zod": "^4.4.3"
   },

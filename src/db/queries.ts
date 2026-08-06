@@ -2,13 +2,17 @@ import { eq, getTableColumns, sql } from 'drizzle-orm'
 import { db } from './index'
 import { events, links, projects } from './schema'
 
-export function listProjects() {
-  return db
+// `d` is a seam for tests only — everything in the app uses the singleton.
+export function listProjects(d = db) {
+  return d
     .select({
       ...getTableColumns(projects),
-      unread: sql<number>`(select count(*) from ${events}
-        join ${links} on ${links.id} = ${events.linkId}
-        where ${links.projectId} = ${projects.id} and ${events.readAt} is null)`,
+      // Columns are spelled out against aliases rather than interpolated: inside a raw sql``
+      // template drizzle renders `${links.id}` as bare "id", which is ambiguous once two tables
+      // are joined ("ambiguous column name: id" at runtime).
+      unread: sql<number>`(select count(*) from ${events} e
+        join ${links} l on l.id = e.linkId
+        where l.projectId = ${projects}.id and e.readAt is null)`,
     })
     .from(projects)
     .orderBy(projects.createdAt)
