@@ -52,7 +52,7 @@ actually observed.
    page has no empty-state marker.
 3. **A listing falling off the fetch window is not a removal.** With a newest-first, ~2-page window,
    old listings scroll off naturally as new ones appear. Only nominate a removal when the listing
-   vanished while listings *older* than it are still present on the page — then confirm by fetching
+   vanished while listings _older_ than it are still present on the page — then confirm by fetching
    its own detail URL before marking it gone.
 4. **Never delete a live listing (`removedAt IS NULL`) when pruning.** `listings` is the seen-set;
    deleting a live row makes it reappear as "new" on the next run, forever.
@@ -104,3 +104,8 @@ actually observed.
   for phase 05's parser tests — don't delete or "clean up" these.
 - `data/` (SQLite file + Playwright `storageState`) is gitignored and created at runtime; never
   committed.
+
+## Coments policy
+
+- Do not add any comments unless is super necessary. The code should be self-explanatory and readable. If you feel the need to add a comment, consider refactoring the code instead.
+- If you decide to add a comment, make sure it is clear, concise, and adds value. Avoid stating the obvious or repeating what the code already expresses.

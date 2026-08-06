@@ -62,6 +62,10 @@ export function createLink(data: {
   return db.insert(links).values(data).returning().get()
 }
 
+export function updateLink(id: number, data: { label: string }) {
+  return db.update(links).set(data).where(eq(links.id, id)).returning().get()
+}
+
 export function deleteLink(id: number) {
   db.delete(links).where(eq(links.id, id)).run()
 }
