@@ -1,0 +1,104 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { expect, test } from 'vitest'
+import { detectPortal } from '../portals'
+import { parseAdresowo } from './adresowo'
+import { parseGratka } from './gratka'
+import { parseNieruchomosciOnline } from './nieruchomosciOnline'
+import { parseOlx } from './olx'
+import { parseOtodom } from './otodom'
+import type { Portal } from '../portals'
+import type { Parser } from './util'
+
+const FIXTURES_DIR = path.join(import.meta.dirname, '__fixtures__')
+
+// `*-empty.html` are live captures of a search that matched nothing, except adresowo's: that portal
+// answers an empty search by widening it instead, so its fixture is the real page with the results
+// grid emptied.
+const CASES: Array<{
+  portal: Portal
+  parser: Parser
+  pageUrl: string
+  expectedCount: number
+  firstId: string
+}> = [
+  {
+    portal: 'otodom',
+    parser: parseOtodom,
+    pageUrl:
+      'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski/sobotka/sulistrowice',
+    expectedCount: 19,
+    firstId: '68238693',
+  },
+  {
+    portal: 'nieruchomosci-online',
+    parser: parseNieruchomosciOnline,
+    pageUrl: 'https://wroclaw.nieruchomosci-online.pl/szukaj.html',
+    expectedCount: 40,
+    firstId: '25921151',
+  },
+  {
+    portal: 'gratka',
+    parser: parseGratka,
+    pageUrl: 'https://gratka.pl/mapa/nieruchomosci/dzialki-grunty',
+    expectedCount: 35,
+    firstId: '48341533',
+  },
+  {
+    portal: 'adresowo',
+    parser: parseAdresowo,
+    pageUrl: 'https://adresowo.pl/f/dzialki/sulistrowice/g5_lod',
+    expectedCount: 33,
+    firstId: 'dzialka-budowlana-sobotka-sulistrowice-ul-aroniowa-v3j5b2',
+  },
+  {
+    portal: 'olx',
+    parser: parseOlx,
+    pageUrl: 'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
+    expectedCount: 10,
+    firstId: '1bB3GO',
+  },
+]
+
+const read = (name: string) => fs.readFileSync(path.join(FIXTURES_DIR, `${name}.html`), 'utf-8')
+
+test.each(CASES)(
+  '$portal parses the expected listings from the search fixture',
+  ({ portal, parser, pageUrl, expectedCount, firstId }) => {
+    const { listings, emptyState } = parser(read(`${portal}-search`), pageUrl)
+
+    expect(listings).toHaveLength(expectedCount)
+    expect(emptyState).toBe(false)
+    // Page order is load-bearing: phase 06 reasons about position when nominating removals.
+    expect(listings[0]?.externalId).toBe(firstId)
+
+    for (const listing of listings) {
+      expect(listing.externalId).toBeTruthy()
+      expect(listing.title).toBeTruthy()
+      expect(detectPortal(listing.url)).toBe(portal)
+    }
+
+    const withPrice = listings.filter((listing) => listing.price !== null).length
+    expect(withPrice / listings.length).toBeGreaterThanOrEqual(0.8)
+
+    const ids = new Set(listings.map((listing) => listing.externalId))
+    expect(ids.size).toBe(listings.length)
+  },
+)
+
+test.each(CASES)(
+  '$portal reports emptyState on a genuinely empty search',
+  ({ portal, parser, pageUrl }) => {
+    const { listings, emptyState } = parser(read(`${portal}-empty`), pageUrl)
+
+    expect(emptyState).toBe(true)
+    expect(listings).toHaveLength(0)
+  },
+)
+
+test.each(CASES)('$portal treats an unparseable page as an error, not as empty', ({ parser, pageUrl }) => {
+  const { listings, emptyState } = parser('<html><body>nope</body></html>', pageUrl)
+
+  expect(listings).toHaveLength(0)
+  expect(emptyState).toBe(false)
+})

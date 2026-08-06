@@ -23,7 +23,7 @@ pnpm vitest run -t "test name"        # single test by name
 pnpm exec playwright install chromium # required once; Chromium only, not the full browser set
 ```
 
-No `db:generate` / `db:migrate` scripts exist yet — they land in phase 01 (see below).
+`pnpm db:generate` / `pnpm db:migrate` (drizzle-kit) manage the SQLite schema — see `src/db/`.
 
 ## Build plan — read before writing code
 
@@ -32,9 +32,11 @@ phase each). **Read the relevant phase file in full before implementing it** —
 verified specifics (exact JSON paths, selectors, regexes) that aren't guessable from the codebase
 alone, plus a "Done when" section that is the actual acceptance criteria, not this file.
 
-Current state: only **phase 00 (scaffold)** is done — a stock TanStack Start app, no `src/db`,
-`src/server`, or feature code yet. Work through phases in order; don't skip ahead or build phase N+1
-plumbing while implementing phase N.
+Current state: phases 00–05 are done — scaffold, DB + schema, routes/form handling, portal
+identity (`src/server/portals.ts`), the fetch layer (`src/server/fetch/`), and the parsers
+(`src/server/parsers/`). Phases 06–10 (diff engine, run orchestration, findings UI, scheduler,
+hardening) remain. Work through phases in order; don't skip ahead or build phase N+1 plumbing while
+implementing phase N.
 
 Git commit history and phase filenames are the source of truth for what's actually done — check
 `git log` / which `src/` directories exist rather than assuming from this file.
@@ -70,10 +72,15 @@ actually observed.
   to `data/browser-state.json`) — unified behind `fetchPage()`, which escalates HTTP → browser once on
   a detected block and persists that escalation onto the link.
 - **Parsers** (phase 05) are pure functions `(html, pageUrl) => { listings, emptyState }`, one per
-  portal in `src/server/parsers/`, anchored on `data-*` attributes/structure rather than CSS classes
-  (portals churn their class names). This is the only code in the project with a real fixture-based
-  test suite (`fixtures/raw/`, moved to `src/server/parsers/__fixtures__/`), because it's the only
-  code that silently rots when a portal changes.
+  portal in `src/server/parsers/`, anchored on embedded ld+json/`__NEXT_DATA__` where the portal
+  ships it and on `data-*` attributes/structure otherwise — never on CSS classes (portals churn
+  those). Every portal pads a search with offers that aren't results of it (recommendations, a wider
+  radius, a nearby-area block); each parser filters those out, or the diff engine reports them as
+  new listings. `emptyState` comes from a signal that can only mean "the portal said zero" — never
+  from `listings.length === 0`, which would make a broken parser look like a quiet week. This is the
+  only code in the project with a real fixture-based test suite
+  (`src/server/parsers/__fixtures__/`), because it's the only code that silently rots when a portal
+  changes.
 - **Diff engine** (phase 06) — `src/server/diff.ts` — is pure (no DB, no network) and takes the
   known/live listings plus a freshly parsed page and returns added / price-changed / removal
   candidates. The removal logic is the subtle part (rule 3 above); its test suite is what catches
@@ -100,10 +107,22 @@ actually observed.
   `pnpm/json-enforce-catalog` turned off; Prettier owns formatting, ESLint doesn't duplicate it.
 - Vitest runs in `environment: 'node'` only (`vitest.config.ts` is deliberately separate from
   `vite.config.ts`) — everything under test (parsers, diff engine) is server-side, no jsdom needed.
-- `fixtures/raw/` holds live HTML captures of all five portals' search results, taken during planning
-  for phase 05's parser tests — don't delete or "clean up" these.
+- `src/server/parsers/__fixtures__/` holds live HTML captures of all five portals — a search result
+  page each, plus a zero-result page each — don't delete or "clean up" these.
 - `data/` (SQLite file + Playwright `storageState`) is gitignored and created at runtime; never
   committed.
+
+## Dependency policy
+
+- Rungs 1–4 still come first: does this need to exist, is it already installed, does stdlib cover
+  it, does a native platform feature cover it. Phases 05–10 of the build plan are the working
+  example — they add zero new packages, leaning on `Intl.NumberFormat`/`Intl.DateTimeFormat` and
+  `IntersectionObserver` instead of pulling in a formatting or date library.
+- When a feature genuinely needs a new dependency, pick the current, actively-maintained, most-
+  adopted package for that job — not the first tutorial result or a legacy alternative — and check
+  its latest stable release and peer-dependency compatibility with what's already pinned here
+  (React 19, Vite 8, TypeScript 6, Tailwind 4, drizzle-orm 0.45) before installing.
+- Pin with a `^` range like every other entry in `package.json`, not a bare `latest`.
 
 ## Coments policy
 
