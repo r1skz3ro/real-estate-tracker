@@ -1,6 +1,6 @@
-import { eq, getTableColumns, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm'
 import { db } from './index'
-import { events, links, projects } from './schema'
+import { events, links, listings, projects, runLinks, runs } from './schema'
 
 // `d` is a seam for tests only — everything in the app uses the singleton.
 export function listProjects(d = db) {
@@ -64,7 +64,7 @@ export function createLink(data: {
 
 export function updateLink(
   id: number,
-  data: Partial<{ label: string; fetchMode: string }>,
+  data: Partial<typeof links.$inferInsert>,
 ) {
   return db.update(links).set(data).where(eq(links.id, id)).returning().get()
 }
@@ -73,4 +73,101 @@ export function deleteLink(id: number) {
   db.delete(links).where(eq(links.id, id)).run()
 }
 
-// ponytail: only what phases 02-03 need. Runs/listings/events queries land with their phases.
+// better-sqlite3 is synchronous, so a whole link's result applies atomically inside one callback.
+// Statements issued through the singleton `db` in here join the transaction — same connection.
+export function tx<T>(fn: () => T): T {
+  return db.transaction(fn)
+}
+
+// The run row and its checklist go in together, before any network call, so the UI can render the
+// full list of links immediately instead of items appearing one by one.
+export function createRun(
+  projectId: number,
+  trigger: string,
+  linkIds: Array<number>,
+): number {
+  return tx(() => {
+    const run = db
+      .insert(runs)
+      .values({ projectId, trigger, status: 'running', startedAt: new Date() })
+      .returning()
+      .get()
+    if (linkIds.length > 0)
+      db.insert(runLinks)
+        .values(linkIds.map((linkId) => ({ runId: run.id, linkId })))
+        .run()
+    return run.id
+  })
+}
+
+export function activeRun(projectId: number) {
+  return db
+    .select()
+    .from(runs)
+    .where(and(eq(runs.projectId, projectId), eq(runs.status, 'running')))
+    .get()
+}
+
+export function finishRun(id: number, status: string) {
+  db.update(runs)
+    .set({ status, finishedAt: new Date() })
+    .where(eq(runs.id, id))
+    .run()
+}
+
+// Keyed by (runId, linkId) rather than the row id — the orchestrator already has both.
+export function updateRunLink(
+  runId: number,
+  linkId: number,
+  data: Partial<typeof runLinks.$inferInsert>,
+) {
+  db.update(runLinks)
+    .set(data)
+    .where(and(eq(runLinks.runId, runId), eq(runLinks.linkId, linkId)))
+    .run()
+}
+
+export function getRunStatus(runId: number) {
+  const run = db.select().from(runs).where(eq(runs.id, runId)).get()
+  if (!run) return null
+  return {
+    run,
+    links: db
+      .select({
+        ...getTableColumns(runLinks),
+        label: links.label,
+        portal: links.portal,
+        // Lets the UI tell a baseline (baselined during this run) from a quiet run — both report
+        // zero events.
+        baselinedAt: links.baselinedAt,
+      })
+      .from(runLinks)
+      .innerJoin(links, eq(links.id, runLinks.linkId))
+      .where(eq(runLinks.runId, runId))
+      .orderBy(runLinks.id)
+      .all(),
+  }
+}
+
+export function liveListings(linkId: number) {
+  return db
+    .select()
+    .from(listings)
+    .where(and(eq(listings.linkId, linkId), isNull(listings.removedAt)))
+    .all()
+}
+
+export function insertListing(data: typeof listings.$inferInsert) {
+  return db.insert(listings).values(data).returning().get()
+}
+
+export function updateListing(
+  id: number,
+  data: Partial<typeof listings.$inferInsert>,
+) {
+  db.update(listings).set(data).where(eq(listings.id, id)).run()
+}
+
+export function insertEvent(data: typeof events.$inferInsert) {
+  db.insert(events).values(data).run()
+}

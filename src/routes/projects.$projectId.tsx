@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { X } from 'lucide-react'
+import { RefreshCw, X } from 'lucide-react'
 import {
   MAX_LINKS,
   addLinkFn,
@@ -10,6 +11,7 @@ import {
   listLinksFn,
   renameLinkFn,
 } from '../server/links'
+import { getRunStatusFn, startRunFn } from '../server/runs'
 import {
   deleteProjectFn,
   getProjectFn,
@@ -54,11 +56,29 @@ export const Route = createFileRoute('/projects/$projectId')({
   component: ProjectDetail,
 })
 
-// Grey until phases 07/10 give the dot real meaning.
 const STATUS_DOT: Record<string, string> = {
   pending: 'bg-muted-foreground/40',
+  running: 'bg-amber-400 animate-pulse',
   ok: 'bg-emerald-500',
   error: 'bg-red-500',
+}
+
+type RunStatus = NonNullable<Awaited<ReturnType<typeof getRunStatusFn>>>
+
+function runSummary(
+  runLink: RunStatus['links'][number],
+  startedAt: RunStatus['run']['startedAt'],
+) {
+  if (runLink.status === 'pending') return 'waiting'
+  if (runLink.status === 'running') return 'fetching…'
+  if (runLink.status === 'error') return runLink.error ?? 'error'
+  // Baselined during this run — a first run reports what it seeded, not zero news.
+  if (
+    runLink.baselinedAt &&
+    new Date(runLink.baselinedAt) >= new Date(startedAt)
+  )
+    return `baseline: ${runLink.parsedCount}`
+  return `${runLink.newCount} new · ${runLink.priceCount} price · ${runLink.removedCount} removed`
 }
 
 // Mirrors the server's cross-field check so it surfaces inline instead of only after a round trip.
@@ -97,6 +117,26 @@ function ProjectDetail() {
   const renameLink = useMutation({ mutationFn: renameLinkFn, ...invalidate })
   const removeLink = useMutation({ mutationFn: deleteLinkFn, ...invalidate })
   const atCap = links.length >= MAX_LINKS
+
+  const [runId, setRunId] = useState<number | null>(null)
+  const startRun = useMutation({
+    mutationFn: startRunFn,
+    onSuccess: ({ runId: id }) => setRunId(id),
+  })
+  const run = useQuery({
+    queryKey: ['run', runId],
+    queryFn: () => getRunStatusFn({ data: runId ?? 0 }),
+    enabled: runId !== null,
+    refetchInterval: ({ state }) =>
+      state.data?.run.status === 'running' ? 1500 : false,
+  })
+  const running = run.data?.run.status === 'running'
+  const runLinks = new Map(run.data?.links.map((rl) => [rl.linkId, rl]) ?? [])
+
+  // The run rewrote every link's status, fetchMode and lastError — pull the loader back through.
+  useEffect(() => {
+    if (run.data && !running) void router.invalidate()
+  }, [run.data, running, router])
 
   const remove = useMutation({
     mutationFn: deleteProjectFn,
@@ -175,64 +215,97 @@ function ProjectDetail() {
         <CardHeader>
           <CardTitle>Search links</CardTitle>
           <CardDescription>
-            {links.length} of {MAX_LINKS} saved searches.
+            {running
+              ? 'Refreshing — 3–8s between requests, so a full project takes a minute or two.'
+              : `${links.length} of ${MAX_LINKS} saved searches.`}
           </CardDescription>
+          <CardAction>
+            <Button
+              variant="secondary"
+              disabled={running || startRun.isPending || links.length === 0}
+              onClick={() => startRun.mutate({ data: project.id })}
+            >
+              <RefreshCw className={cn(running && 'animate-spin')} />
+              {running ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </CardAction>
         </CardHeader>
 
         {links.length > 0 && (
           <ul className="divide-y divide-border border-y border-border">
-            {links.map((link) => (
-              <li
-                key={link.id}
-                className="flex items-center gap-2 px-4 py-2 transition-colors hover:bg-accent/30"
-              >
-                <span
-                  title={link.status}
-                  className={cn(
-                    'size-2 shrink-0 rounded-full',
-                    STATUS_DOT[link.status] ?? 'bg-muted-foreground/40',
-                  )}
-                />
-                <Input
-                  defaultValue={link.label}
-                  aria-label="Link label"
-                  maxLength={80}
-                  onBlur={(e) => {
-                    const label = e.target.value.trim()
-                    if (label && label !== link.label)
-                      renameLink.mutate({ data: { id: link.id, label } })
-                    else e.target.value = link.label
-                  }}
-                  className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-1.5 text-sm hover:border-input md:text-sm dark:bg-transparent"
-                />
-                <Badge asChild variant="secondary">
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={link.url}
-                  >
-                    {link.portal}
-                  </a>
-                </Badge>
-                {link.fetchMode === 'browser' && (
-                  <Badge variant="outline" className="text-amber-400">
-                    browser
-                  </Badge>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Remove ${link.label}`}
-                  disabled={removeLink.isPending}
-                  onClick={() => removeLink.mutate({ data: link.id })}
-                  className="text-muted-foreground hover:text-destructive"
+            {links.map((link) => {
+              const runLink = runLinks.get(link.id)
+              const status = runLink?.status ?? link.status
+              const summary =
+                runLink && run.data
+                  ? runSummary(runLink, run.data.run.startedAt)
+                  : null
+              return (
+                <li
+                  key={link.id}
+                  className="flex items-center gap-2 px-4 py-2 transition-colors hover:bg-accent/30"
                 >
-                  <X />
-                </Button>
-              </li>
-            ))}
+                  <span
+                    title={status}
+                    className={cn(
+                      'size-2 shrink-0 rounded-full',
+                      STATUS_DOT[status] ?? 'bg-muted-foreground/40',
+                    )}
+                  />
+                  <Input
+                    defaultValue={link.label}
+                    aria-label="Link label"
+                    maxLength={80}
+                    onBlur={(e) => {
+                      const label = e.target.value.trim()
+                      if (label && label !== link.label)
+                        renameLink.mutate({ data: { id: link.id, label } })
+                      else e.target.value = link.label
+                    }}
+                    className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-1.5 text-sm hover:border-input md:text-sm dark:bg-transparent"
+                  />
+                  {summary && (
+                    <span
+                      title={summary}
+                      className={cn(
+                        'max-w-56 shrink truncate text-xs tabular-nums',
+                        status === 'error'
+                          ? 'text-destructive'
+                          : 'text-muted-foreground',
+                      )}
+                    >
+                      {summary}
+                    </span>
+                  )}
+                  <Badge asChild variant="secondary">
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={link.url}
+                    >
+                      {link.portal}
+                    </a>
+                  </Badge>
+                  {(link.fetchMode === 'browser' || runLink?.escalated) && (
+                    <Badge variant="outline" className="text-amber-400">
+                      browser
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove ${link.label}`}
+                    disabled={removeLink.isPending}
+                    onClick={() => removeLink.mutate({ data: link.id })}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <X />
+                  </Button>
+                </li>
+              )
+            })}
           </ul>
         )}
 

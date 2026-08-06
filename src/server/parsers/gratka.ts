@@ -4,7 +4,7 @@ import type { Parser } from './util'
 type GratkaOffer = {
   '@type': 'Offer'
   name: string
-  price: string
+  price?: string
   url: string
   image?: string
   itemOffered?: {

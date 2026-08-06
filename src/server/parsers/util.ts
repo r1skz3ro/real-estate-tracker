@@ -18,7 +18,10 @@ export type ParseResult = {
 export type Parser = (html: string, pageUrl: string) => ParseResult
 
 // JS `\s` already matches NBSP (U+00A0) and narrow NBSP (U+202F), Polish portals' thousands separators.
-export function parsePlNumber(s: string): number | null {
+// Takes null/undefined because ld+json omits `price` outright on a "cena do negocjacji" offer — the
+// declared `price: string` is the portal's promise, not a guarantee.
+export function parsePlNumber(s: string | null | undefined): number | null {
+  if (s == null) return null
   const cleaned = s.replace(/\s/g, '').replace(',', '.')
   if (cleaned === '') return null
   const n = Number(cleaned)

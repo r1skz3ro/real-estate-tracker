@@ -9,6 +9,9 @@ test.each([
   ['1 950 000', 1950000],
   ['', null],
   ['abc', null],
+  // gratka/nieruchomosci-online drop the field entirely for a negotiable price.
+  [undefined, null],
+  [null, null],
 ])('parsePlNumber(%j) -> %j', (input, expected) => {
   expect(parsePlNumber(input)).toBe(expected)
 })

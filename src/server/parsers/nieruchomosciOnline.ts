@@ -4,10 +4,10 @@ import type { Parser } from './util'
 type NolOffer = {
   '@type': 'Offer'
   name: string
-  price: string
+  price?: string
   url: string
   image?: string
-  priceSpecification?: { price: string }
+  priceSpecification?: { price?: string }
   itemOffered?: {
     address?: { addressLocality?: string }
     floorSize?: { value: string }

@@ -21,6 +21,8 @@ const CASES: Array<{
   pageUrl: string
   expectedCount: number
   firstId: string
+  // A portal that lists another portal's offers among its own results.
+  alsoAllows?: Portal
 }> = [
   {
     portal: 'otodom',
@@ -56,8 +58,9 @@ const CASES: Array<{
     parser: parseOlx,
     pageUrl:
       'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
-    expectedCount: 10,
+    expectedCount: 25,
     firstId: '1bB3GO',
+    alsoAllows: 'otodom',
   },
 ]
 
@@ -66,7 +69,7 @@ const read = (name: string) =>
 
 test.each(CASES)(
   '$portal parses the expected listings from the search fixture',
-  ({ portal, parser, pageUrl, expectedCount, firstId }) => {
+  ({ portal, parser, pageUrl, expectedCount, firstId, alsoAllows }) => {
     const { listings, emptyState } = parser(read(`${portal}-search`), pageUrl)
 
     expect(listings).toHaveLength(expectedCount)
@@ -74,11 +77,19 @@ test.each(CASES)(
     // Page order is load-bearing: phase 06 reasons about position when nominating removals.
     expect(listings[0]?.externalId).toBe(firstId)
 
+    const allowed = [portal, alsoAllows].filter(Boolean)
     for (const listing of listings) {
       expect(listing.externalId).toBeTruthy()
       expect(listing.title).toBeTruthy()
-      expect(detectPortal(listing.url)).toBe(portal)
+      expect(allowed).toContain(detectPortal(listing.url))
     }
+
+    // Cross-posts are 15 of OLX's 25 results. Dropping them again would look like a quiet portal
+    // rather than a 60% loss, so pin them.
+    if (alsoAllows)
+      expect(
+        listings.some((listing) => detectPortal(listing.url) === alsoAllows),
+      ).toBe(true)
 
     const withPrice = listings.filter(
       (listing) => listing.price !== null,

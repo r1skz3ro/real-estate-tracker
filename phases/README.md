@@ -14,8 +14,8 @@ actually pass before moving on.
 | 04 | [Fetch layer](./04-fetch-layer.md) | HTTP + Playwright fetch, throttle, escalation | ✅ done |
 | 05 | [Parsers](./05-parsers.md) | Five portal parsers + fixture tests | ✅ done |
 | 06 | [Diff engine](./06-diff-engine.md) | new / price-changed / removed detection | ✅ done |
-| 07 | [Run orchestration](./07-run-orchestration.md) | Background refresh job + live progress | ⬜ next |
-| 08 | [Findings UI](./08-findings-ui.md) | Timeline of refresh batches, listing cards | ⬜ |
+| 07 | [Run orchestration](./07-run-orchestration.md) | Background refresh job + live progress | ✅ done |
+| 08 | [Findings UI](./08-findings-ui.md) | Timeline of refresh batches, listing cards | ⬜ next |
 | 09 | [Scheduler](./09-scheduler.md) | node-cron, per-project times, catch-up, prune | ⬜ |
 | 10 | [Hardening](./10-hardening.md) | Error surfacing, README, notify seam | ⬜ |
 
@@ -44,13 +44,21 @@ These come from live reconnaissance and from decisions already made. Do not "sim
 | nieruchomosci-online.pl | HTTP | ld+json `CollectionPage` → `mainEntity.offers[0].offers` | `offers: []` |
 | gratka.pl | HTTP | ld+json `Product` → `offers.offers` | `offerCount: 0` |
 | adresowo.pl | HTTP | `#offer-list-results a[data-track="offer-link"]` → `/o/<slug>` | grid renders empty |
-| olx.pl | **browser** | `[data-cy="l-card"]`, `a[href^="/d/oferta/"]` → `-ID<code>.html` | `[data-testid="total-count"]` reads 0 |
+| olx.pl | **browser** | first `[data-testid="listing-grid"]` → `[data-cy="l-card"]`, `a[href*="/oferta/"]` → `-ID<code>` | `[data-testid="total-count"]` reads 0 |
 
-Each portal pads a search with offers that are **not** results of it, and phase 05 filters all three
-out: gratka renders six "you might like" cards on an empty search (hence ld+json, not the
+Each portal pads a search with offers that are **not** results of it, and phase 05 filters them out:
+gratka renders six "you might like" cards on an empty search (hence ld+json, not the
 `[data-property-id]` cards), adresowo appends an "Oferty z najbliższej okolicy" block below the
-results grid, and OLX marks wider-radius and last-resort fillers with a `reason=extended_search…`
-query param.
+results grid, and OLX does it twice over — a second `listing-grid` holding ~40 filler cards, plus a
+`reason=extended_search…` query param on the wider-radius and last-resort ones. Only the **first**
+`listing-grid` is the search: its card count matches OLX's own "Znaleźliśmy N ogłoszeń", and on a
+zero-result page it is empty while the padding grid is still full.
+
+OLX and Otodom share an owner, so an OLX search interleaves Otodom offers among its own — 15 of the
+25 results in the fixture, in OLX card markup but on `/pl/oferta/` paths. They are genuine results
+and phase 05 keeps them, so an OLX link can yield `otodom.pl` listing URLs. `fetchPage` and
+`verifyRemoved` already key off `detectPortal(listing.url)`, so those resolve against Otodom's ready
+selector and expired marker without special-casing.
 
 Live HTML captures of all five, plus a zero-result page per portal, are in
 `src/server/parsers/__fixtures__/` — used by phase 05's tests.
