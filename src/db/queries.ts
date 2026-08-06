@@ -62,7 +62,10 @@ export function createLink(data: {
   return db.insert(links).values(data).returning().get()
 }
 
-export function updateLink(id: number, data: { label: string }) {
+export function updateLink(
+  id: number,
+  data: Partial<{ label: string; fetchMode: string }>,
+) {
   return db.update(links).set(data).where(eq(links.id, id)).returning().get()
 }
 

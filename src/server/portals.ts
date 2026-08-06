@@ -1,13 +1,32 @@
 // Single source of truth for portal identity. Phases 04/05/07 import from here rather than
 // re-deriving which portal a URL belongs to.
+// `ready` is what the browser path waits for before reading the DOM — the cheapest marker that the
+// listings are actually there.
 export const PORTALS = {
-  olx: { host: /(^|\.)olx\.pl$/, fetchMode: 'browser' },
-  otodom: { host: /(^|\.)otodom\.pl$/, fetchMode: 'http' },
-  gratka: { host: /(^|\.)gratka\.pl$/, fetchMode: 'http' },
-  adresowo: { host: /(^|\.)adresowo\.pl$/, fetchMode: 'http' },
+  olx: {
+    host: /(^|\.)olx\.pl$/,
+    fetchMode: 'browser',
+    ready: '[data-cy="l-card"]',
+  },
+  otodom: {
+    host: /(^|\.)otodom\.pl$/,
+    fetchMode: 'http',
+    ready: 'script#__NEXT_DATA__',
+  },
+  gratka: {
+    host: /(^|\.)gratka\.pl$/,
+    fetchMode: 'http',
+    ready: '[data-property-id]',
+  },
+  adresowo: {
+    host: /(^|\.)adresowo\.pl$/,
+    fetchMode: 'http',
+    ready: 'a[data-track="offer-link"]',
+  },
   'nieruchomosci-online': {
     host: /(^|\.)nieruchomosci-online\.pl$/,
     fetchMode: 'http',
+    ready: 'script[type="application/ld+json"]',
   },
 } as const
 
