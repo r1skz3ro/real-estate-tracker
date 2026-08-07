@@ -17,7 +17,15 @@ type OtodomItem = {
       province: OtodomAddressPart
     }
   }
-  images: Array<{ medium: string }>
+  images: Array<{ medium: string; large: string }>
+  shortDescription?: string | null
+  estate?: string | null
+  transaction?: string | null
+  roomsNumber?: number | null
+  floorNumber?: number | null
+  terrainAreaInSquareMeters?: number | null
+  dateCreated?: string | null
+  isPrivateOwner?: boolean
 }
 
 type NextData = {
@@ -57,6 +65,19 @@ export const parseOtodom: Parser = (html, pageUrl) => {
       pricePerM2: item.pricePerSquareMeter?.value ?? null,
       location,
       imageUrl: item.images[0]?.medium ?? null,
+      // Otodom truncates it to ~200 chars on the search page; the full text lives on the detail page
+      // and is not worth a request per listing.
+      description: item.shortDescription ?? null,
+      details: {
+        estate: item.estate,
+        transaction: item.transaction,
+        roomsNumber: item.roomsNumber,
+        floorNumber: item.floorNumber,
+        terrainAreaInSquareMeters: item.terrainAreaInSquareMeters,
+        dateCreated: item.dateCreated,
+        isPrivateOwner: item.isPrivateOwner,
+        images: item.images.map((image) => image.large),
+      },
     }
   })
 

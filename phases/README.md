@@ -15,9 +15,9 @@ actually pass before moving on.
 | 05 | [Parsers](./05-parsers.md) | Five portal parsers + fixture tests | ✅ done |
 | 06 | [Diff engine](./06-diff-engine.md) | new / price-changed / removed detection | ✅ done |
 | 07 | [Run orchestration](./07-run-orchestration.md) | Background refresh job + live progress | ✅ done |
-| 08 | [Findings UI](./08-findings-ui.md) | Timeline of refresh batches, listing cards | ⬜ next |
-| 09 | [Scheduler](./09-scheduler.md) | node-cron, per-project times, catch-up, prune | ⬜ |
-| 10 | [Hardening](./10-hardening.md) | Error surfacing, README, notify seam | ⬜ |
+| 08 | [Findings UI](./08-findings-ui.md) | Timeline of refresh batches, listing cards | ✅ done |
+| 09 | [Scheduler](./09-scheduler.md) | node-cron, per-project times, catch-up, prune | ✅ done |
+| 10 | [Hardening](./10-hardening.md) | Error surfacing, README, notify seam | ⬜ next |
 
 ## Non-negotiable rules
 
@@ -31,8 +31,11 @@ These come from live reconnaissance and from decisions already made. Do not "sim
 3. **Falling off the window ≠ removed.** With a newest-first 2-page window, old listings scroll off
    naturally. Only nominate a removal when a listing vanished while listings *older* than it are
    still present, then confirm against its own detail URL.
-4. **Never delete live listings when pruning.** `listings` is the seen-set; deleting a row with
-   `removedAt IS NULL` makes that listing reappear as "new" forever.
+4. **Never delete a listing, full stop.** `listings` is the seen-set — deleting a row with
+   `removedAt IS NULL` makes that listing reappear as "new" forever — *and*, since phase 09, the
+   permanent archive: the point is that a listing's price, description and photo stay exportable
+   years after the portal drops it. The prune only removes runs older than the retention window that
+   produced zero events.
 5. **Be polite.** Sequential fetches, 3–8s random gap, one run at a time globally, one reused
    browser per run with persisted cookies.
 

@@ -48,8 +48,10 @@ each one fixes a bug that was actually observed.
    old listings scroll off naturally. Only nominate a removal when the listing vanished while
    listings _older_ than it are still present — then confirm via its own detail URL before marking
    it gone.
-4. **Never delete a live listing (`removedAt IS NULL`) when pruning.** `listings` is the seen-set;
-   deleting a live row makes it reappear as "new" next run, forever.
+4. **Never delete a listing.** `listings` is the seen-set (deleting a live row makes it reappear as
+   "new" next run, forever) _and_ the permanent archive — its price/description/photo must stay
+   exportable years after the portal drops the offer. The prune only removes runs past the retention
+   window that produced zero events; listings and events are kept forever.
 5. **Be polite to the portals.** Sequential fetches only (never parallel), 3–8s random jitter
    between requests, one refresh run at a time process-wide (global mutex), one reused browser
    context per run with persisted cookies.
@@ -68,8 +70,10 @@ each one fixes a bug that was actually observed.
   the only code that silently rots when a portal changes.
 - Diff engine (`src/server/diff.ts`) is pure — no DB, no network.
 - `runProject()` isolates each link in its own try/catch so one dead portal never aborts the run.
-- Scheduler compares wall-clock time in `Europe/Warsaw` against configured times every 5 min rather
-  than using cron entries — catch-up-after-sleep and schedule changes fall out for free.
+- Scheduler compares wall-clock time in `Europe/Warsaw` against configured times every 30 min rather
+  than using cron entries — catch-up-after-sleep and schedule changes fall out for free. It starts
+  one project per tick so projects sharing a refresh time don't burst at the same portal, and boots
+  from `src/server.ts` (the TanStack Start server-entry override).
 - DB requires `foreign_keys = ON` set explicitly (SQLite defaults it off, so cascading deletes
   silently no-op without it). Plain exported query functions in `src/db/queries.ts`, no repository
   classes.

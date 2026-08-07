@@ -23,6 +23,8 @@ const CASES: Array<{
   firstId: string
   // A portal that lists another portal's offers among its own results.
   alsoAllows?: Portal
+  // Only these two publish a description on the search page at all.
+  expectsDescription?: boolean
 }> = [
   {
     portal: 'otodom',
@@ -31,6 +33,7 @@ const CASES: Array<{
       'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski/sobotka/sulistrowice',
     expectedCount: 19,
     firstId: '68238693',
+    expectsDescription: true,
   },
   {
     portal: 'nieruchomosci-online',
@@ -38,6 +41,7 @@ const CASES: Array<{
     pageUrl: 'https://wroclaw.nieruchomosci-online.pl/szukaj.html',
     expectedCount: 40,
     firstId: '25921151',
+    expectsDescription: true,
   },
   {
     portal: 'gratka',
@@ -69,7 +73,15 @@ const read = (name: string) =>
 
 test.each(CASES)(
   '$portal parses the expected listings from the search fixture',
-  ({ portal, parser, pageUrl, expectedCount, firstId, alsoAllows }) => {
+  ({
+    portal,
+    parser,
+    pageUrl,
+    expectedCount,
+    firstId,
+    alsoAllows,
+    expectsDescription,
+  }) => {
     const { listings, emptyState } = parser(read(`${portal}-search`), pageUrl)
 
     expect(listings).toHaveLength(expectedCount)
@@ -98,6 +110,16 @@ test.each(CASES)(
 
     const ids = new Set(listings.map((listing) => listing.externalId))
     expect(ids.size).toBe(listings.length)
+
+    // The archive columns rot as silently as the rest of the parser — a renamed JSON key would just
+    // start writing nulls forever.
+    if (expectsDescription) {
+      const withDescription = listings.filter(
+        (listing) => (listing.description ?? '') !== '',
+      ).length
+      expect(withDescription / listings.length).toBeGreaterThanOrEqual(0.8)
+      expect(listings[0]?.details).toBeTruthy()
+    }
   },
 )
 

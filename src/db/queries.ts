@@ -5,6 +5,8 @@ import {
   getTableColumns,
   inArray,
   isNull,
+  lt,
+  notInArray,
   sql,
 } from 'drizzle-orm'
 import { db } from './index'
@@ -37,7 +39,12 @@ export function createProject(data: { name: string }) {
 
 export function updateProject(
   id: number,
-  data: Partial<{ name: string; runAt1: string; runAt2: string }>,
+  data: Partial<{
+    name: string
+    runAt1: string
+    runAt2: string
+    lastScheduledAt: Date
+  }>,
 ) {
   return db
     .update(projects)
@@ -235,6 +242,26 @@ export function markRunRead(runId: number, d = db) {
     .set({ readAt: new Date() })
     .where(and(eq(events.runId, runId), isNull(events.readAt)))
     .run()
+}
+
+// `listings` is a permanent archive — a listing's data has to outlive the portal offer, so nothing
+// here ever deletes one, live or removed. Events (and with them the whole price history) are kept
+// too; the only rows worth reclaiming are runs that found nothing, which is nearly all of them.
+// Deleting a run cascades its runLinks.
+export function pruneRuns(days = 90, d = db) {
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  const deleted = d
+    .delete(runs)
+    .where(
+      and(
+        lt(runs.startedAt, cutoff),
+        notInArray(runs.id, d.select({ id: events.runId }).from(events)),
+      ),
+    )
+    .run()
+  // Deleting rows never shrinks the file on its own, and VACUUM cannot run inside a transaction.
+  d.run(sql`vacuum`)
+  return deleted.changes
 }
 
 // events.linkId is denormalised precisely so this needs no join.

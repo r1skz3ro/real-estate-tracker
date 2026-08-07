@@ -1,3 +1,7 @@
+// Whatever extra a portal happens to publish on its search page — shape differs per portal, so it
+// is stored as JSON rather than as a column each. Only otodom and nieruchomosci-online have any.
+export type ListingDetails = Record<string, unknown>
+
 export type ParsedListing = {
   externalId: string
   url: string
@@ -8,6 +12,10 @@ export type ParsedListing = {
   pricePerM2: number | null
   location: string | null
   imageUrl: string | null
+  // Optional, not nullable-required: gratka, adresowo and OLX publish neither on a search page, and
+  // fetching each listing's own detail page for them would cost one polite request per listing.
+  description?: string | null
+  details?: ListingDetails | null
 }
 
 export type ParseResult = {

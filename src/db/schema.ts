@@ -6,6 +6,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
+import type { ListingDetails } from '#/server/parsers/util'
 
 const createdAt = () =>
   integer('createdAt', { mode: 'timestamp_ms' })
@@ -99,6 +100,10 @@ export const listings = sqliteTable(
     pricePerM2: real('pricePerM2'),
     location: text('location'),
     imageUrl: text('imageUrl'),
+    // Captured at first sight and not refreshed afterwards (only price is) — listings outlive the
+    // portal offer here, so this is the archive copy of what the search page said.
+    description: text('description'),
+    details: text('details', { mode: 'json' }).$type<ListingDetails>(),
     firstSeenAt: integer('firstSeenAt', { mode: 'timestamp_ms' }).notNull(),
     lastSeenAt: integer('lastSeenAt', { mode: 'timestamp_ms' }).notNull(),
     // position in last fetch; used by removal detection

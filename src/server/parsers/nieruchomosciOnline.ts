@@ -9,7 +9,8 @@ type NolOffer = {
   image?: string
   priceSpecification?: { price?: string }
   itemOffered?: {
-    address?: { addressLocality?: string }
+    description?: string
+    address?: { addressLocality?: string; addressRegion?: string }
     floorSize?: { value: string }
   }
 }
@@ -46,6 +47,8 @@ export const parseNieruchomosciOnline: Parser = (html) => {
         : null,
       location: offer.itemOffered?.address?.addressLocality ?? null,
       imageUrl: offer.image ?? null,
+      description: offer.itemOffered?.description ?? null,
+      details: { addressRegion: offer.itemOffered?.address?.addressRegion },
     }
   })
 
