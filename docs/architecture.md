@@ -24,63 +24,50 @@ one node process  (pnpm dev, or pnpm build && pnpm preview)
 │
 ├── TanStack Start HTTP handler ── :3000 ──► React SSR + /_serverFn RPC endpoints
 │
-├── node-cron scheduler ── ticks every 30 min ──► starts refresh runs
-│
 ├── better-sqlite3 ──► data/estate.db      (in-process, synchronous, no daemon)
 │
 └── Playwright Chromium ──► launched on demand during a run, killed when the run ends
 ```
 
-Kill the process and nothing keeps running. Start it again and it catches up on any refresh it
-slept through. All state is the one SQLite file plus a cookie jar next to it.
+Nothing is scheduled and nothing polls. The process sits idle until someone presses **Refresh**;
+that click is the only thing that ever starts a run. Kill the process and nothing keeps running.
+All state is the one SQLite file plus a cookie jar next to it.
 
 The whole system is roughly 2,000 lines of TypeScript across `src/`. Here is the map:
 
-| Directory                 | Responsibility                                                           |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `src/routes/`             | Three file-based routes: the shell/sidebar, the project list, a project. |
-| `src/components/`         | `findings.tsx` (the changes timeline) + `ui/` (shadcn/ui primitives).    |
-| `src/lib/`                | `format.ts` (Intl formatters, error copy), `utils.ts` (`cn()`).          |
-| `src/server/*.ts`         | The RPC boundary — `createServerFn` wrappers with zod validators.        |
-| `src/server/fetch/`       | HTTP + Playwright fetching, block detection, the politeness mutex.       |
-| `src/server/parsers/`     | One parser per portal + byte-for-byte HTML fixtures.                     |
-| `src/server/diff.ts`      | Pure change detection. No DB, no network.                                |
-| `src/server/run.ts`       | The orchestrator: fetch → parse → diff → persist.                        |
-| `src/server/scheduler.ts` | The wall-clock tick and the retention prune.                             |
-| `src/server/portals.ts`   | Single source of truth for portal identity.                              |
-| `src/db/`                 | Drizzle schema, the connection singleton, every query function.          |
-| `drizzle/`                | Generated SQL migrations (committed).                                    |
-| `data/`                   | The SQLite file and Playwright cookies (gitignored, runtime-created).    |
+| Directory               | Responsibility                                                           |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `src/routes/`           | Three file-based routes: the shell/sidebar, the project list, a project. |
+| `src/components/`       | `findings.tsx` (the changes timeline) + `ui/` (shadcn/ui primitives).    |
+| `src/lib/`              | `format.ts` (Intl formatters, error copy), `utils.ts` (`cn()`).          |
+| `src/server/*.ts`       | The RPC boundary — `createServerFn` wrappers with zod validators.        |
+| `src/server/fetch/`     | HTTP + Playwright fetching, block detection, the politeness mutex.       |
+| `src/server/parsers/`   | One parser per portal + byte-for-byte HTML fixtures.                     |
+| `src/server/diff.ts`    | Pure change detection. No DB, no network.                                |
+| `src/server/run.ts`     | The orchestrator: fetch → parse → diff → persist.                        |
+| `src/server/portals.ts` | Single source of truth for portal identity.                              |
+| `src/db/`               | Drizzle schema, the connection singleton, every query function.          |
+| `drizzle/`              | Generated SQL migrations (committed).                                    |
+| `data/`                 | The SQLite file and Playwright cookies (gitignored, runtime-created).    |
 
 ---
 
 ## 2. Boot: what happens when the process starts
 
-### The server entry override
+### There is no server entry override
 
-TanStack Start ships its own server entry. This repo overrides it, and the entire reason is one
-side effect. `src/server.ts` is 11 lines:
-
-```ts
-import { startScheduler } from '#/server/scheduler'
-
-// Overrides TanStack Start's packaged server entry purely to get this side effect: it is the one
-// module that runs exactly once per server process, in both `pnpm dev` and a built server.
-startScheduler()
-
-export default { fetch: createStartHandler(defaultStreamHandler) }
-```
-
-The `tanstackStart()` Vite plugin picks up `src/server.ts` by convention. Nothing else in the app
-imports it.
+TanStack Start's packaged server entry is used as-is. The repo used to override it (`src/server.ts`)
+purely to boot the scheduler; with refresh manual-only there is no boot-time side effect left to
+run, so the file is gone.
 
 ### The import chain that opens the database
 
-`startScheduler()` is what drags the data layer into existence:
+Nothing opens the database at boot. The first server function to be called drags the data layer into
+existence, and it stays for the life of the process:
 
 ```
-src/server.ts
-  └─ #/server/scheduler   (imports listProjects, pruneRuns, updateProject)
+a /_serverFn request
+  └─ #/server/projects | runs | links
        └─ #/db/queries
             └─ #/db/index  ──► export const db = createDb()   ← the file is opened HERE
 ```
@@ -106,28 +93,14 @@ export const db = createDb()
 
 Four consequences worth internalising:
 
-1. **Migrations run at boot.** `pnpm db:migrate` exists but is optional — a fresh clone just works.
+1. **Migrations run on first use.** `pnpm db:migrate` exists but is optional — a fresh clone just
+   works.
 2. **`foreign_keys = ON` is not optional.** SQLite defaults it off, and every cascade in this schema
    depends on it. `src/db/schema.test.ts` exists purely to prove the pragma is live.
 3. **Both `data/estate.db` and `drizzle/` are relative paths.** Start the process from the repo root
    or you get a second, empty database somewhere else.
 4. **The connection is a module singleton, never closed.** `createDb` is exported only so tests can
    open a throwaway `:memory:` database through the same pragma + migrate path.
-
-### The HMR guard
-
-Vite re-executes the server entry on every hot reload. Without a guard, each reload would stack
-another pair of cron jobs onto the same process, so `startScheduler()` flags `globalThis`:
-
-```ts
-const started = Symbol.for('estate-tracker.scheduler')
-export function startScheduler() {
-  const global = globalThis as Flagged
-  if (!ENABLED || global[started]) return
-  global[started] = true
-  ...
-}
-```
 
 ### One Vite quirk
 
@@ -165,8 +138,8 @@ every link — no false flood of "new" listings, but the old timeline is gone.
 
 ## 4. The data model
 
-Six tables. There is **no settings table**: per-project schedule lives on the project row, and the
-handful of global knobs are environment variables.
+Six tables. There is **no settings table** and no configuration to store: a project is a name and
+the links under it.
 
 ```
 projects ─┬─* links ─┬─* listings ─* events
@@ -184,17 +157,11 @@ are JS `Date` objects in code and millisecond epochs on disk.
 
 A set of searches refreshed together.
 
-| Column            | Type         | Notes                           |
-| ----------------- | ------------ | ------------------------------- |
-| `id`              | integer PK   |                                 |
-| `name`            | text         | not null                        |
-| `runAt1`          | text         | not null, default `'08:00'`     |
-| `runAt2`          | text         | not null, default `'20:00'`     |
-| `lastScheduledAt` | timestamp_ms | nullable — set by the scheduler |
-| `createdAt`       | timestamp_ms | not null                        |
-
-`runAt1`/`runAt2` are `'HH:MM'` strings in Europe/Warsaw. They are strings, not times, because the
-scheduler compares them as strings (see §9).
+| Column      | Type         | Notes    |
+| ----------- | ------------ | -------- |
+| `id`        | integer PK   |          |
+| `name`      | text         | not null |
+| `createdAt` | timestamp_ms | not null |
 
 ### `links`
 
@@ -228,7 +195,6 @@ what the UI polls while a refresh is in flight.
 | ------------ | ------------ | ------------------------------------- |
 | `id`         | integer PK   |                                       |
 | `projectId`  | integer FK   | → `projects.id`, cascade              |
-| `trigger`    | text         | `'manual'` \| `'scheduled'`           |
 | `status`     | text         | `'running'` \| `'done'` \| `'failed'` |
 | `startedAt`  | timestamp_ms | not null                              |
 | `finishedAt` | timestamp_ms | nullable while running                |
@@ -302,8 +268,9 @@ Every foreign key is `ON DELETE cascade`:
 - delete a **project** → its links, runs, runLinks, listings and events all go;
 - delete a **link** → its listings, its runLinks rows and its events go (runs survive, they hang off
   the project);
-- delete a **run** → its runLinks go, **and its events go with them** — which is exactly why the
-  retention prune (§9) refuses to touch any run that produced an event.
+- delete a **run** → its runLinks go, **and its events go with them** — which is exactly why nothing
+  in the app ever deletes a run. Runs, events and listings accumulate forever; only an explicit
+  project or link deletion by the user removes anything.
 
 There are no `CHECK` constraints and no Drizzle enums: the string unions above are documented in
 comments and enforced at the zod boundary in `src/server/*.ts`.
@@ -735,7 +702,7 @@ This is where fetching, parsing, diffing and persistence come together.
 
 ```
 startRunFn (RPC)                                        ← returns in milliseconds
-  └─ startRun(projectId, 'manual' | 'scheduled')         [synchronous setup]
+  └─ startRun(projectId)                                 [synchronous setup]
        ├─ activeRun(projectId)  ─── already running? return that runId, start nothing
        ├─ listLinks(projectId)
        ├─ createRun()  ─── ONE transaction: the runs row + one runLinks row per link
@@ -779,7 +746,7 @@ returns. The caller gets a `runId` immediately and starts polling, while the act
 behind the mutex:
 
 ```ts
-export function startRun(projectId: number, trigger: Trigger) {
+export function startRun(projectId: number) {
   const existing = activeRun(projectId)
   if (existing) return { runId: existing.id, finished: Promise.resolve() }
   ...
@@ -867,108 +834,7 @@ point: _a timeout usually fixes itself, a layout change never does_.
 // an abstraction: a provider interface for zero providers is the thing worth not building.
 ```
 
----
-
-## 9. Scheduling and retention — `src/server/scheduler.ts`
-
-### Wall-clock comparison, not cron entries
-
-There is no cron entry per project. A single tick runs every 30 minutes and asks each project whether
-one of its two daily slots has come due:
-
-```ts
-// 'sv-SE' renders "2026-08-06 20:15" — ISO-ordered, so both halves compare as plain strings and no
-// timezone offset arithmetic (or date library) is needed anywhere below.
-const WARSAW = new Intl.DateTimeFormat('sv-SE', {
-  timeZone: 'Europe/Warsaw',
-  dateStyle: 'short',
-  timeStyle: 'short',
-})
-
-export function isDue(project: Project, now = new Date()): boolean {
-  const [today, time] = warsaw(now)
-  const [lastDay, lastTime] = project.lastScheduledAt
-    ? warsaw(project.lastScheduledAt)
-    : ['', '']
-
-  return [project.runAt1, project.runAt2].some(
-    (slot) => slot <= time && !(lastDay === today && lastTime >= slot),
-  )
-}
-```
-
-The `sv-SE` locale is a trick: it formats as `2026-08-06 20:15`, which is ISO-ordered, so the time
-half compares directly as a string against the `'HH:MM'` columns. No offset maths, no date library,
-DST handled by `Intl`.
-
-Three behaviours fall out of comparing wall-clock time instead of registering timers:
-
-- **Catch-up is free.** A laptop asleep through the 08:00 slot wakes up with `lastDay !== today`, so
-  the slot is still due and runs immediately.
-- **Schedule changes take effect at once**, with no timers to tear down and re-register.
-- **Two overdue slots collapse into one run** — the current state of the portals is what's wanted,
-  not two runs 30 seconds apart.
-
-`startScheduler()` also calls `tick()` once at boot, because booting at 09:00 after the 08:00 slot has
-passed has to produce a run immediately. That is the behaviour the always-on-app model rests on.
-
-### One project per tick
-
-```ts
-function tick() {
-  for (const project of listProjects()) {
-    if (!isDue(project)) continue
-    // Stamped before the run starts, so a tick landing mid-run cannot re-fire the same slot.
-    updateProject(project.id, { lastScheduledAt: new Date() })
-    void runProject(project.id, 'scheduled')
-    // ponytail: one project per tick, so projects sharing a refresh time spread out over ticks
-    // instead of queueing every link against the same portal in one serial burst.
-    break
-  }
-}
-```
-
-The stamp goes in **before** the run launches, so a tick landing mid-run cannot re-fire the same slot.
-The `break` means several projects sharing 08:00 spread across successive ticks rather than queueing
-every link against the same portal in one long serial burst.
-
-### Retention
-
-```ts
-cron.schedule('0 4 * * *', () => pruneRuns(RETENTION_DAYS), {
-  timezone: 'Europe/Warsaw',
-})
-```
-
-`pruneRuns()` in `src/db/queries.ts` deletes runs older than the cutoff **that produced no events**,
-then vacuums. Their `runLinks` rows cascade away with them. Nothing else is ever deleted:
-
-```ts
-// `listings` is a permanent archive — a listing's data has to outlive the portal offer, so nothing
-// here ever deletes one, live or removed. Events (and with them the whole price history) are kept
-// too; the only rows worth reclaiming are runs that found nothing, which is nearly all of them.
-```
-
-`VACUUM` runs unconditionally afterwards — deleting rows never shrinks the file on its own, and
-`VACUUM` cannot run inside a transaction.
-
-### Environment knobs
-
-Plain `process.env`, no `.env` loader (Vite does not put `.env` into `process.env` for the server
-runtime anyway):
-
-| Variable                 | Default | Effect                                   |
-| ------------------------ | ------- | ---------------------------------------- |
-| `SCHEDULER_ENABLED`      | on      | `=false` disables the scheduler entirely |
-| `SCHEDULER_TICK_MINUTES` | `30`    | tick interval                            |
-| `RETENTION_DAYS`         | `90`    | how long empty runs are kept             |
-
-The scheduler is also disabled automatically under `VITEST`, so no test run launches a background
-Chromium.
-
----
-
-## 10. The web layer
+## 9. The web layer
 
 ### Routing
 
@@ -1080,7 +946,7 @@ refreshes the query; a finished run does both.
 
 The main read surface. Runs newest-first, each with its events:
 
-- **Quiet runs collapse to one line** (`"6 sie 20:15 · scheduled · no changes"`) rather than being
+- **Quiet runs collapse to one line** (`"6 sie 20:15 · no changes"`) rather than being
   hidden — `listFindings()` deliberately keeps runs with zero events, because dropping them would
   make a quiet week look like a broken app.
 - **Pagination** is `limit + 1`: fetch one extra row to answer "is there more?" without a count query.
@@ -1111,7 +977,7 @@ render dark. `src/components/ui/` is CLI-generated. The rules for changing any o
 
 ---
 
-## 11. Conventions, tests, and what breaks first
+## 10. Conventions, tests, and what breaks first
 
 ### Conventions
 
@@ -1137,9 +1003,8 @@ render dark. `src/components/ui/` is CLI-generated. The rules for changing any o
 | `src/server/diff.test.ts`            | Window semantics — scroll-off is not a removal, dedupe, price epsilon.    |
 | `src/server/run.test.ts`             | Dead portal isolated; baseline emits nothing; escalate exactly once.      |
 | `src/server/portals.test.ts`         | Hostname matching (including the `.evil.com` case), page URLs, labels.    |
-| `src/server/scheduler.test.ts`       | `isDue` across catch-up, already-covered and early-morning cases.         |
 | `src/db/schema.test.ts`              | `foreign_keys = ON` — deletes a project, asserts the cascade happened.    |
-| `src/db/queries.test.ts`             | Prune safety: only old empty runs, never listings or history.             |
+| `src/db/queries.test.ts`             | Unread counts per project; findings grouped by run, quiet runs kept.      |
 | `src/lib/format.test.ts`             | Error category → red/amber copy, including unrecognised categories.       |
 
 ### What breaks first
@@ -1181,7 +1046,7 @@ remove it.
    listings _older_ than it are still present — then confirm via its own detail URL. → §7, §5e
 4. **Never delete a listing.** `listings` is the seen-set (deleting a live row makes it reappear as
    "new" next run, forever) _and_ the permanent archive — its price, description and photo must stay
-   exportable years after the portal drops the offer. → §4, §8, §9
+   exportable years after the portal drops the offer. Nothing is pruned on a schedule. → §4, §8
 5. **Be polite to the portals.** Sequential fetches only, 3–8 s random jitter between requests, one
    refresh run at a time process-wide, one reused browser context per run with persisted cookies.
    → §5c, §5d

@@ -1,12 +1,7 @@
 import { expect, test } from 'vitest'
 import { createDb } from './index'
-import {
-  listFindings,
-  listProjects,
-  markProjectRead,
-  pruneRuns,
-} from './queries'
-import { events, links, listings, projects, runLinks, runs } from './schema'
+import { listFindings, listProjects, markProjectRead } from './queries'
+import { events, links, listings, projects, runs } from './schema'
 
 // The unread badge is a correlated subquery over a join — it either blows up ("ambiguous column
 // name") or silently miscounts, and neither shows up until the sidebar renders.
@@ -46,7 +41,6 @@ test('listProjects counts only unread events, per project', () => {
     .insert(runs)
     .values({
       projectId: a!.id,
-      trigger: 'manual',
       status: 'done',
       startedAt: now,
     })
@@ -123,13 +117,11 @@ test('listFindings groups events under their run, keeps quiet runs, paginates', 
     .values([
       {
         projectId: a!.id,
-        trigger: 'scheduled',
         status: 'done',
         startedAt: new Date(now - 60_000),
       },
       {
         projectId: a!.id,
-        trigger: 'manual',
         status: 'done',
         startedAt: new Date(now),
       },
@@ -140,7 +132,6 @@ test('listFindings groups events under their run, keeps quiet runs, paginates', 
     .insert(runs)
     .values({
       projectId: b!.id,
-      trigger: 'manual',
       status: 'done',
       startedAt: new Date(now),
     })
@@ -191,97 +182,4 @@ test('listFindings groups events under their run, keeps quiet runs, paginates', 
     ),
   ).toEqual([])
   expect(listProjects(db).map((p) => p.unread)).toEqual([0, 1])
-})
-
-// The single most damaging mistake available in this codebase is deleting a listing: `listings` is
-// the seen-set, so a dropped row comes back as "new" forever — and it is also the archive the user
-// exports from years later. Nothing but empty old runs may go.
-test('pruneRuns drops only old runs that found nothing, never listings or history', () => {
-  const db = createDb(':memory:')
-  const now = Date.now()
-  const old = new Date(now - 100 * 24 * 60 * 60 * 1000)
-
-  const project = db.insert(projects).values({ name: 'A' }).returning().get()
-  const link = db
-    .insert(links)
-    .values({
-      projectId: project.id,
-      url: 'https://gratka.pl/s',
-      portal: 'gratka',
-      label: 'gratka · a',
-    })
-    .returning()
-    .get()
-  const [live, gone] = db
-    .insert(listings)
-    .values([
-      {
-        linkId: link.id,
-        externalId: '1',
-        url: 'https://gratka.pl/ob/1',
-        title: 'Żywa',
-        firstSeenAt: old,
-        lastSeenAt: new Date(now),
-        lastRank: 0,
-      },
-      {
-        linkId: link.id,
-        externalId: '2',
-        url: 'https://gratka.pl/ob/2',
-        title: 'Usunięta',
-        firstSeenAt: old,
-        lastSeenAt: old,
-        lastRank: 1,
-        removedAt: old,
-      },
-    ])
-    .returning()
-    .all()
-
-  const run = (startedAt: Date) =>
-    db
-      .insert(runs)
-      .values({
-        projectId: project.id,
-        trigger: 'scheduled',
-        status: 'done',
-        startedAt,
-      })
-      .returning()
-      .get()
-  const oldQuiet = run(old)
-  const oldLoud = run(old)
-  const fresh = run(new Date(now))
-
-  db.insert(runLinks).values({ runId: oldQuiet.id, linkId: link.id }).run()
-  db.insert(events)
-    .values({
-      listingId: gone!.id,
-      linkId: link.id,
-      runId: oldLoud.id,
-      type: 'removed',
-      oldPrice: 295_000,
-    })
-    .run()
-
-  expect(pruneRuns(90, db)).toBe(1)
-
-  expect(
-    db
-      .select()
-      .from(runs)
-      .all()
-      .map((r) => r.id)
-      .sort(),
-  ).toEqual([oldLoud.id, fresh.id].sort())
-  expect(db.select().from(runLinks).all()).toEqual([])
-  // Price history and the listings it points at outlive the retention window.
-  expect(db.select().from(events).all()).toHaveLength(1)
-  expect(
-    db
-      .select()
-      .from(listings)
-      .all()
-      .map((l) => l.id),
-  ).toEqual([live!.id, gone!.id])
 })

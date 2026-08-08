@@ -201,7 +201,7 @@ function RunSection({
   if (run.events.length === 0)
     return (
       <p className="text-sm text-muted-foreground">
-        {fmtWhen(run.startedAt)} · {run.trigger} ·{' '}
+        {fmtWhen(run.startedAt)} ·{' '}
         {run.status === 'failed' ? 'failed' : 'no changes'}
       </p>
     )
@@ -212,7 +212,6 @@ function RunSection({
         <span className="text-sm font-medium tabular-nums">
           {fmtWhen(run.startedAt)}
         </span>
-        <Badge variant="secondary">{run.trigger}</Badge>
         <span className="text-sm text-muted-foreground tabular-nums">
           {totals}
         </span>

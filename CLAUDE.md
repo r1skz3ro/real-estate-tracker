@@ -50,8 +50,8 @@ each one fixes a bug that was actually observed.
    it gone.
 4. **Never delete a listing.** `listings` is the seen-set (deleting a live row makes it reappear as
    "new" next run, forever) _and_ the permanent archive — its price/description/photo must stay
-   exportable years after the portal drops the offer. The prune only removes runs past the retention
-   window that produced zero events; listings and events are kept forever.
+   exportable years after the portal drops the offer. Nothing is ever deleted on a schedule —
+   listings, events and runs are all kept forever, so price history stays available for analytics.
 5. **Be polite to the portals.** Sequential fetches only (never parallel), 3–8s random jitter
    between requests, one refresh run at a time process-wide (global mutex), one reused browser
    context per run with persisted cookies.
@@ -69,11 +69,9 @@ each one fixes a bug that was actually observed.
   `src/server/parsers/__fixtures__/` is the only real fixture-based test suite in the project — it's
   the only code that silently rots when a portal changes.
 - Diff engine (`src/server/diff.ts`) is pure — no DB, no network.
-- `runProject()` isolates each link in its own try/catch so one dead portal never aborts the run.
-- Scheduler compares wall-clock time in `Europe/Warsaw` against configured times every 30 min rather
-  than using cron entries — catch-up-after-sleep and schedule changes fall out for free. It starts
-  one project per tick so projects sharing a refresh time don't burst at the same portal, and boots
-  from `src/server.ts` (the TanStack Start server-entry override).
+- `startRun()` isolates each link in its own try/catch so one dead portal never aborts the run.
+- Refresh is **manual only** — there is no scheduler, no background process, no cron. A run starts
+  when the user clicks Refresh (`startRunFn`) and never any other way; don't add a timer.
 - DB requires `foreign_keys = ON` set explicitly (SQLite defaults it off, so cascading deletes
   silently no-op without it). Plain exported query functions in `src/db/queries.ts`, no repository
   classes.
@@ -96,7 +94,7 @@ whole theme.
 
 - No `tailwind.config.*` — don't add one; theme lives in `:root` + `@theme inline` in `styles.css`.
 - Dark-only by design: `<html className="dark">` is hardcoded, `color-scheme: dark` is on `:root`
-  (keeps native `<input type="time">`/scrollbars dark) — no toggle, no `prefers-color-scheme`.
+  (keeps native controls and scrollbars dark) — no toggle, no `prefers-color-scheme`.
   Never write `dark:` variants in app code (only `src/components/ui/` needs the `.dark` class).
 - Semantic tokens (`bg-background`, `text-muted-foreground`, etc.) for chrome; literal Tailwind
   colors only where color carries information (status dots, the amber `browser` badge) — pick

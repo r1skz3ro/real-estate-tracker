@@ -54,12 +54,9 @@ function Home() {
                 <Link
                   to="/projects/$projectId"
                   params={{ projectId: String(project.id) }}
-                  className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-accent/50"
+                  className="block px-4 py-3 font-medium transition-colors hover:bg-accent/50"
                 >
-                  <span className="font-medium">{project.name}</span>
-                  <span className="text-sm text-muted-foreground tabular-nums">
-                    {project.runAt1} · {project.runAt2}
-                  </span>
+                  {project.name}
                 </Link>
               </li>
             ))}

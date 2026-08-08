@@ -7,7 +7,7 @@ import { startRun } from './run'
 // a run is in flight gets that run's id back rather than starting another.
 export const startRunFn = createServerFn({ method: 'POST' })
   .validator(z.number().int())
-  .handler(({ data }) => ({ runId: startRun(data, 'manual').runId }))
+  .handler(({ data }) => ({ runId: startRun(data).runId }))
 
 export const getRunStatusFn = createServerFn({ method: 'GET' })
   .validator(z.number().int())

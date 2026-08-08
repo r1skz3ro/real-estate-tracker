@@ -8,10 +8,6 @@ import {
   updateProject,
 } from '#/db/queries'
 
-// 'HH:MM', Europe/Warsaw. <input type="time"> already enforces this client-side; zod is the
-// trust-boundary backstop.
-const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM')
-
 export const listProjectsFn = createServerFn({ method: 'GET' }).handler(() =>
   listProjects(),
 )
@@ -32,8 +28,6 @@ export const createProjectSchema = z.object({
 export const updateProjectSchema = z.object({
   id: z.number().int(),
   name: z.string().min(1, 'Name is required').max(80),
-  runAt1: time,
-  runAt2: time,
 })
 
 export const createProjectFn = createServerFn({ method: 'POST' })
@@ -42,13 +36,7 @@ export const createProjectFn = createServerFn({ method: 'POST' })
 
 export const updateProjectFn = createServerFn({ method: 'POST' })
   .validator(updateProjectSchema)
-  .handler(({ data: { id, ...fields } }) => {
-    // ponytail: thrown here rather than as a zod .refine() — a ZodError serializes to the client as
-    // a JSON blob, a plain Error keeps the message renderable in the form.
-    if (fields.runAt1 === fields.runAt2)
-      throw new Error('Refresh times must differ')
-    return updateProject(id, fields)
-  })
+  .handler(({ data: { id, ...fields } }) => updateProject(id, fields))
 
 export const deleteProjectFn = createServerFn({ method: 'POST' })
   .validator(z.number().int())

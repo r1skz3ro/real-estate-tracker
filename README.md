@@ -30,9 +30,9 @@ CloudFront 403s every plain-HTTP variant that was tried (realistic Chrome header
 
 ## Using it
 
-1. Create a **project** (a set of searches refreshed together, with two daily refresh times).
+1. Create a **project** (a set of searches refreshed together).
 2. Paste search URLs into it — up to 10 per project. The portal is detected from the hostname.
-3. Hit **Refresh**, or wait for a scheduled run.
+3. Hit **Refresh**. That is the only thing that ever fetches — nothing runs in the background.
 
 ### Every search URL must already be sorted newest-first
 
@@ -83,15 +83,14 @@ first, or use `sqlite3 data/estate.db ".backup backup.db"`).
 
 Listings are never deleted, on purpose. The `listings` table is both the seen-set (deleting a live
 row makes that listing reappear as "new" forever) and the permanent archive — a listing's price,
-description and photo stay readable years after the portal drops the offer. Only runs older than the
-retention window _that produced no events_ are pruned.
+description and photo stay readable years after the portal drops the offer. Nothing is pruned, ever:
+runs and events accumulate too, so the full price history stays queryable for later analytics.
 
-## Keeping it running
+## Keeping the server up
 
-Scheduled refreshes only happen while the process is alive — there is no external cron. The
-scheduler boots from `src/server.ts`, compares the wall clock in `Europe/Warsaw` against each
-project's two times every 30 minutes, and catches up after sleep: a laptop shut through 08:00 fires
-that slot when it wakes.
+Nothing happens unless you press Refresh, so the process only needs to be alive when you are
+actually using the app — `pnpm dev` in a terminal is enough. If you would rather it always be
+reachable without starting it by hand, supervise it.
 
 With [pm2](https://pm2.keymetrics.io):
 
@@ -118,14 +117,6 @@ With launchd (macOS), `~/Library/LaunchAgents/com.local.estate-tracker.plist`:
 ```
 
 `launchctl load ~/Library/LaunchAgents/com.local.estate-tracker.plist` to start it.
-
-Environment knobs (plain `process.env`, no `.env` loader):
-
-| Variable                 | Default | Effect                                                                                  |
-| ------------------------ | ------- | --------------------------------------------------------------------------------------- |
-| `SCHEDULER_ENABLED`      | on      | `false` disables scheduled runs — use it in `pnpm dev` so no Chromium launches mid-edit |
-| `SCHEDULER_TICK_MINUTES` | `30`    | how often due projects are checked                                                      |
-| `RETENTION_DAYS`         | `90`    | age past which empty runs are pruned (04:00 Warsaw daily)                               |
 
 ## Being polite to the portals
 
@@ -167,23 +158,6 @@ pnpm db:generate / pnpm db:migrate     # drizzle-kit, schema in src/db/schema.ts
 ```
 
 [`docs/architecture.md`](./docs/architecture.md) is the full technical walkthrough — process model,
-data model, fetching and anti-bot handling, change detection, scheduling, and which file does what.
+data model, fetching and anti-bot handling, change detection, and which file does what.
 `phases/` holds the build plan this repo was written from, one file per phase; `CLAUDE.md` holds the
 architecture notes and the non-negotiable domain rules.
-
-# TODO
-
-- store logs if something goes wrong.
-- refresh per link
-- more explanation of the data in every added link.
-- way to preview already fetched link, even if they are not new - initial fetch.
-- consider auto fetching, manuall seems to be good enough for now.
-- no way of createing new project
-- updating new project data (title) should reflect in left panel.
-- create view to see all stored listings in db
-- option to see and edit provided link
-- tracking number of requests per link.
-- What each status mean for each link. Every provided link be a separate entity, with latest fethcing logs, separate listings, if it fails what it mens (like 404 error), possibility to edit a link.
-- The app should be hosted, the jobs shouldnt work in the background. They should be manually triggered by user and then their cookies and network is used.
-- For some reason nieruchomosci-online returns results that are not new.
-- Gratka often fails.

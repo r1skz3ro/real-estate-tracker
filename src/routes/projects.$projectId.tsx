@@ -45,7 +45,6 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Findings } from '@/components/findings'
 import { fmtWhen, linkError } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -136,27 +135,16 @@ function ProjectError({ error, reset }: ErrorComponentProps) {
   )
 }
 
-// Mirrors the server's cross-field check so it surfaces inline instead of only after a round trip.
-const formSchema = updateProjectSchema.refine((v) => v.runAt1 !== v.runAt2, {
-  message: 'Refresh times must differ',
-  path: ['runAt2'],
-})
-
 function ProjectDetail() {
   const { project, links } = Route.useLoaderData()
   const router = useRouter()
   const queryClient = useQueryClient()
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: standardSchemaResolver(formSchema),
+  const form = useForm<z.infer<typeof updateProjectSchema>>({
+    resolver: standardSchemaResolver(updateProjectSchema),
     // `values` (not `defaultValues`) so switching project re-syncs the inputs — the route component
     // isn't remounted on a param change.
-    values: {
-      id: project.id,
-      name: project.name,
-      runAt1: project.runAt1,
-      runAt2: project.runAt2,
-    },
+    values: { id: project.id, name: project.name },
   })
   const { errors } = form.formState
 
@@ -222,37 +210,6 @@ function ProjectDetail() {
               </p>
             )}
           </CardHeader>
-
-          <CardContent className="mt-2 space-y-2">
-            <div className="flex items-end gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="runAt1">Refresh at</Label>
-                <Input
-                  id="runAt1"
-                  type="time"
-                  {...form.register('runAt1')}
-                  className="w-auto tabular-nums"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="runAt2">and at</Label>
-                <Input
-                  id="runAt2"
-                  type="time"
-                  {...form.register('runAt2')}
-                  className="w-auto tabular-nums"
-                />
-              </div>
-            </div>
-            {(errors.runAt1 ?? errors.runAt2) && (
-              <p className="text-sm text-destructive">
-                {errors.runAt1?.message ?? errors.runAt2?.message}
-              </p>
-            )}
-            <p className="text-sm text-muted-foreground">
-              Times are Europe/Warsaw.
-            </p>
-          </CardContent>
 
           <CardFooter className="gap-3">
             <Button type="submit" disabled={save.isPending}>

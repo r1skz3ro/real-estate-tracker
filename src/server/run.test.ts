@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-import { runProject } from './run'
+import { startRun } from './run'
 import type { ParseResult, ParsedListing } from './parsers/util'
 
 const fetchPage = vi.fn()
@@ -94,7 +94,7 @@ test('a dead portal fails alone and the run carries on', async () => {
       : Promise.resolve(page({ listings: [listing('a'), listing('b')] })),
   )
 
-  await runProject(1, 'manual')
+  await startRun(1).finished
 
   expect(state.runLinks.get(1)).toMatchObject({ status: 'ok', parsedCount: 2 })
   expect(state.runLinks.get(3)).toMatchObject({ status: 'ok', parsedCount: 2 })
@@ -112,7 +112,7 @@ test('zero parsed with no empty-state marker escalates once, then fails the link
   state.links = [link(1)]
   fetchPage.mockResolvedValue(page({ listings: [], emptyState: false }))
 
-  await runProject(1, 'manual')
+  await startRun(1).finished
 
   expect(fetchPage).toHaveBeenCalledTimes(2)
   expect(fetchPage.mock.calls[1]?.[0]).toMatchObject({ fetchMode: 'browser' })
@@ -124,7 +124,7 @@ test('zero parsed with an empty-state marker is a normal quiet result', async ()
   state.links = [link(1)]
   fetchPage.mockResolvedValue(page({ listings: [], emptyState: true }))
 
-  await runProject(1, 'manual')
+  await startRun(1).finished
 
   expect(state.runLinks.get(1)).toMatchObject({ status: 'ok', parsedCount: 0 })
   expect(state.runStatus).toBe('done')

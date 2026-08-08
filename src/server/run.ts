@@ -21,7 +21,6 @@ import type { links, listings } from '#/db/schema'
 
 type Link = typeof links.$inferSelect
 type Listing = typeof listings.$inferSelect
-type Trigger = 'manual' | 'scheduled'
 
 // Its message is already `<category>: <detail>`; reasonFor passes it through untouched.
 class LinkError extends Error {}
@@ -257,14 +256,13 @@ async function notify(summary: {
 
 // Synchronous setup (better-sqlite3 is sync), so the caller gets a runId to poll immediately while
 // the work runs behind the global fetch mutex.
-export function startRun(projectId: number, trigger: Trigger) {
+export function startRun(projectId: number) {
   const existing = activeRun(projectId)
   if (existing) return { runId: existing.id, finished: Promise.resolve() }
 
   const projectLinks = listLinks(projectId)
   const runId = createRun(
     projectId,
-    trigger,
     projectLinks.map((l) => l.id),
   )
   const finished = withLock(() => execute(runId, projectId, projectLinks))
@@ -272,8 +270,3 @@ export function startRun(projectId: number, trigger: Trigger) {
   finished.catch(() => {})
   return { runId, finished }
 }
-
-export const runProject = (
-  projectId: number,
-  trigger: Trigger,
-): Promise<void> => startRun(projectId, trigger).finished

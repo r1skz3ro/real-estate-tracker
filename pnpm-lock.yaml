@@ -56,9 +56,6 @@ importers:
       lucide-react:
         specifier: ^1.29.0
         version: 1.29.0(react@19.2.8)
-      node-cron:
-        specifier: ^4.6.0
-        version: 4.6.0
       playwright:
         specifier: ^1.62.1
         version: 1.62.1
@@ -3276,10 +3273,6 @@ packages:
   node-abi@3.94.0:
     resolution: {integrity: sha512-W5ZNO5KRPB5TkYmGVD9F6YqhsglXJzE6etpbmT+f6EQElhiX/UTG551cnsRGvLG3fyZEg9HwaDmNmj5nwJ4z9g==}
     engines: {node: '>=10'}
-
-  node-cron@4.6.0:
-    resolution: {integrity: sha512-Si/bzYiKRHOB8/a99T2+SDGN582ONDMSTlJr5oCkT6GtnqPjZ2s10eoQRYkW9ZHwjVxONL+W8Fb+qR0AHMQsdg==}
-    engines: {node: '>=20'}
 
   node-releases@2.0.52:
     resolution: {integrity: sha512-MRlTqhAfoMx/4mhEbPo3Hi02g9LJZaJkka69V6h67Cb1gjrAG0jsTE4CZX1eptNx+VCAwJmfpnDIF4P0Nh1A7A==}
@@ -6781,8 +6774,6 @@ snapshots:
   node-abi@3.94.0:
     dependencies:
       semver: 7.8.5
-
-  node-cron@4.6.0: {}
 
   node-releases@2.0.52: {}
 

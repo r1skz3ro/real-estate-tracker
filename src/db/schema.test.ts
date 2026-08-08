@@ -38,7 +38,6 @@ test('deleting a project cascades to its links and listings', () => {
     .returning()
     .get()
 
-  expect(project.runAt1).toBe('08:00')
   expect(link.status).toBe('pending')
   expect(listing.currency).toBe('PLN')
   expect(listing.removedAt).toBeNull()

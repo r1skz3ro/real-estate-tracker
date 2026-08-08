@@ -16,10 +16,6 @@ const createdAt = () =>
 export const projects = sqliteTable('projects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
-  // 'HH:MM', Europe/Warsaw
-  runAt1: text('runAt1').notNull().default('08:00'),
-  runAt2: text('runAt2').notNull().default('20:00'),
-  lastScheduledAt: integer('lastScheduledAt', { mode: 'timestamp_ms' }),
   createdAt: createdAt(),
 })
 
@@ -48,7 +44,6 @@ export const runs = sqliteTable(
     projectId: integer('projectId')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    trigger: text('trigger').notNull(), // 'manual'|'scheduled'
     status: text('status').notNull(), // 'running'|'done'|'failed'
     startedAt: integer('startedAt', { mode: 'timestamp_ms' }).notNull(),
     finishedAt: integer('finishedAt', { mode: 'timestamp_ms' }),
