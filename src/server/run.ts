@@ -65,6 +65,10 @@ async function runLink(runId: number, link: Link) {
     }
     if ([403, 429, 503].includes(res.status))
       throw new LinkError(`blocked: HTTP ${res.status}`)
+    // The portal answered, and its answer is that this URL is gone — waiting will not fix it, so
+    // it is a category of its own rather than a transport failure.
+    if (res.status === 404 || res.status === 410)
+      throw new LinkError(`not-found: HTTP ${res.status}`)
     if (res.status >= 400) throw new LinkError(`network: HTTP ${res.status}`)
     return PARSERS[portal](res.html, res.url)
   }
@@ -191,7 +195,11 @@ async function runLink(runId: number, link: Link) {
   }
 }
 
-async function execute(runId: number, projectLinks: Array<Link>) {
+async function execute(
+  runId: number,
+  projectId: number,
+  projectLinks: Array<Link>,
+) {
   let ok = 0
   try {
     for (const link of projectLinks) {
@@ -232,13 +240,18 @@ async function execute(runId: number, projectLinks: Array<Link>) {
     // polling a phantom job forever.
     await closeBrowser().catch(() => {})
     finishRun(runId, projectLinks.length > 0 && ok === 0 ? 'failed' : 'done')
-    notify({ runId, ok, failed: projectLinks.length - ok })
+    await notify({ projectId, runId, ok, failed: projectLinks.length - ok })
   }
 }
 
-// ponytail: the notify seam. Email/Telegram arrive in phase 10 — one call site is the whole
-// abstraction worth having until there is a second channel.
-function notify(summary: { runId: number; ok: number; failed: number }) {
+// ponytail: the notify seam — email/Telegram hangs off this one call site. Add a channel here, not
+// an abstraction: a provider interface for zero providers is the thing worth not building.
+async function notify(summary: {
+  projectId: number
+  runId: number
+  ok: number
+  failed: number
+}) {
   void summary
 }
 
@@ -254,7 +267,7 @@ export function startRun(projectId: number, trigger: Trigger) {
     trigger,
     projectLinks.map((l) => l.id),
   )
-  const finished = withLock(() => execute(runId, projectLinks))
+  const finished = withLock(() => execute(runId, projectId, projectLinks))
   // Nobody awaits the manual path; keep a stray rejection from taking the process down.
   finished.catch(() => {})
   return { runId, finished }

@@ -42,7 +42,10 @@ function Home() {
       <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
 
       {projects.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">No projects yet</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Create your first project below — a project is a set of saved search
+          URLs refreshed together.
+        </p>
       ) : (
         <Card className="mt-4 gap-0 py-0">
           <ul className="divide-y divide-border">

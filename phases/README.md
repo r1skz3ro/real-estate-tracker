@@ -17,7 +17,7 @@ actually pass before moving on.
 | 07 | [Run orchestration](./07-run-orchestration.md) | Background refresh job + live progress | ✅ done |
 | 08 | [Findings UI](./08-findings-ui.md) | Timeline of refresh batches, listing cards | ✅ done |
 | 09 | [Scheduler](./09-scheduler.md) | node-cron, per-project times, catch-up, prune | ✅ done |
-| 10 | [Hardening](./10-hardening.md) | Error surfacing, README, notify seam | ⬜ next |
+| 10 | [Hardening](./10-hardening.md) | Error surfacing, README, notify seam | ✅ done |
 
 ## Non-negotiable rules
 

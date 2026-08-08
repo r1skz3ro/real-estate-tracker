@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { TriangleAlert } from 'lucide-react'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import { listProjectsFn } from '../server/projects'
@@ -77,7 +78,15 @@ function RootLayout() {
                 className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
               >
                 <span className="truncate">{project.name}</span>
-                {project.unread > 0 && <Badge>{project.unread}</Badge>}
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {project.failing > 0 && (
+                    <TriangleAlert
+                      className="size-3.5 text-amber-500"
+                      aria-label={`${project.failing} failing ${project.failing === 1 ? 'link' : 'links'}`}
+                    />
+                  )}
+                  {project.unread > 0 && <Badge>{project.unread}</Badge>}
+                </span>
               </Link>
             ))}
           </nav>

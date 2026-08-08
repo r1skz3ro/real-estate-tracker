@@ -112,9 +112,26 @@ export function Findings({ projectId }: { projectId: number }) {
       )}
 
       <CardContent className="space-y-4">
-        {visible.length === 0 ? (
+        {findings.isPending ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : findings.isError ? (
+          <div className="space-y-2">
+            <p className="text-sm text-destructive">
+              Could not load changes: {findings.error.message}
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void findings.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : visible.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {filtering ? 'Nothing matches those filters.' : 'No refreshes yet.'}
+            {filtering
+              ? 'Nothing matches those filters.'
+              : 'No changes yet — refresh to set a baseline.'}
           </p>
         ) : (
           visible.map((run) => (

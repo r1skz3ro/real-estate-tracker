@@ -23,6 +23,9 @@ export function listProjects(d = db) {
       unread: sql<number>`(select count(*) from ${events} e
         join ${links} l on l.id = e.linkId
         where l.projectId = ${projects}.id and e.readAt is null)`,
+      // A red link on a project you rarely open is invisible without this.
+      failing: sql<number>`(select count(*) from ${links} l
+        where l.projectId = ${projects}.id and l.status = 'error')`,
     })
     .from(projects)
     .orderBy(projects.createdAt)

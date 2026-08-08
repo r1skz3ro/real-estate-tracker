@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import {
+  Link as RouterLink,
+  createFileRoute,
+  useRouter,
+} from '@tanstack/react-router'
 import { RefreshCw, X } from 'lucide-react'
 import {
   MAX_LINKS,
@@ -43,7 +47,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Findings } from '@/components/findings'
+import { fmtWhen, linkError } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { ErrorComponentProps } from '@tanstack/react-router'
 import type { z } from 'zod'
 
 export const Route = createFileRoute('/projects/$projectId')({
@@ -54,6 +60,7 @@ export const Route = createFileRoute('/projects/$projectId')({
       links: await listLinksFn({ data: id }),
     }
   },
+  errorComponent: ProjectError,
   component: ProjectDetail,
 })
 
@@ -65,6 +72,37 @@ const STATUS_DOT: Record<string, string> = {
 }
 
 type RunStatus = NonNullable<Awaited<ReturnType<typeof getRunStatusFn>>>
+type Link = ReturnType<typeof Route.useLoaderData>['links'][number]
+
+// What the row says and how loud it says it. The raw reason stays as the tooltip — the friendly
+// wording is for reading, the category detail is for debugging.
+function linkState(
+  link: Link,
+  runLink: RunStatus['links'][number] | undefined,
+  startedAt: RunStatus['run']['startedAt'] | undefined,
+) {
+  const status = runLink?.status ?? link.status
+  const reason = runLink ? runLink.error : link.lastError
+  const error = status === 'error' ? linkError(reason) : null
+
+  const dot = error
+    ? error.tone === 'amber'
+      ? 'bg-amber-500'
+      : 'bg-red-500'
+    : (STATUS_DOT[status] ?? STATUS_DOT.pending)
+
+  if (error)
+    return { status, dot, text: error.text, title: reason, tone: error.tone }
+
+  const text =
+    runLink && startedAt
+      ? runSummary(runLink, startedAt)
+      : status === 'ok' && link.lastRunAt
+        ? `last checked ${fmtWhen(link.lastRunAt)}`
+        : null
+
+  return { status, dot, text, title: text, tone: null }
+}
 
 function runSummary(
   runLink: RunStatus['links'][number],
@@ -72,7 +110,6 @@ function runSummary(
 ) {
   if (runLink.status === 'pending') return 'waiting'
   if (runLink.status === 'running') return 'fetching…'
-  if (runLink.status === 'error') return runLink.error ?? 'error'
   // Baselined during this run — a first run reports what it seeded, not zero news.
   if (
     runLink.baselinedAt &&
@@ -80,6 +117,23 @@ function runSummary(
   )
     return `baseline: ${runLink.parsedCount}`
   return `${runLink.newCount} new · ${runLink.priceCount} price · ${runLink.removedCount} removed`
+}
+
+function ProjectError({ error, reset }: ErrorComponentProps) {
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <CardTitle>Could not load this project</CardTitle>
+        <CardDescription>{error.message}</CardDescription>
+      </CardHeader>
+      <CardFooter className="gap-3">
+        <Button onClick={reset}>Try again</Button>
+        <Button variant="secondary" asChild>
+          <RouterLink to="/">All projects</RouterLink>
+        </Button>
+      </CardFooter>
+    </Card>
+  )
 }
 
 // Mirrors the server's cross-field check so it surfaces inline instead of only after a round trip.
@@ -240,11 +294,11 @@ function ProjectDetail() {
           <ul className="divide-y divide-border border-y border-border">
             {links.map((link) => {
               const runLink = runLinks.get(link.id)
-              const status = runLink?.status ?? link.status
-              const summary =
-                runLink && run.data
-                  ? runSummary(runLink, run.data.run.startedAt)
-                  : null
+              const { status, dot, text, title, tone } = linkState(
+                link,
+                runLink,
+                run.data?.run.startedAt,
+              )
               return (
                 <li
                   key={link.id}
@@ -252,10 +306,7 @@ function ProjectDetail() {
                 >
                   <span
                     title={status}
-                    className={cn(
-                      'size-2 shrink-0 rounded-full',
-                      STATUS_DOT[status] ?? 'bg-muted-foreground/40',
-                    )}
+                    className={cn('size-2 shrink-0 rounded-full', dot)}
                   />
                   <Input
                     defaultValue={link.label}
@@ -269,17 +320,17 @@ function ProjectDetail() {
                     }}
                     className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-1.5 text-sm hover:border-input md:text-sm dark:bg-transparent"
                   />
-                  {summary && (
+                  {text && (
                     <span
-                      title={summary}
+                      title={title ?? undefined}
                       className={cn(
-                        'max-w-56 shrink truncate text-xs tabular-nums',
-                        status === 'error'
-                          ? 'text-destructive'
-                          : 'text-muted-foreground',
+                        'max-w-80 shrink truncate text-xs tabular-nums',
+                        tone === 'red' && 'text-destructive',
+                        tone === 'amber' && 'text-amber-400',
+                        !tone && 'text-muted-foreground',
                       )}
                     >
-                      {summary}
+                      {text}
                     </span>
                   )}
                   <Badge asChild variant="secondary">
@@ -315,6 +366,11 @@ function ProjectDetail() {
         )}
 
         <CardContent className="space-y-2">
+          {links.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No search links yet — add a search URL below, sorted newest-first.
+            </p>
+          )}
           {atCap ? (
             <p className="text-sm text-muted-foreground">
               {MAX_LINKS} of {MAX_LINKS} links — remove one to add another.
