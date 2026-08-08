@@ -4,14 +4,14 @@ import {
   finishRun,
   insertEvent,
   insertListing,
+  linkListings,
   listLinks,
-  liveListings,
   tx,
   updateLink,
   updateListing,
   updateRunLink,
 } from '@/server/models/queries'
-import { diff, needsPage2 } from './diff'
+import { diff } from './diff'
 import { fetchPage, verifyRemoved, withLock } from '@/server/scraping/fetch'
 import { closeBrowser } from '@/server/scraping/fetch/browser'
 import { PARSERS } from '@/server/scraping/parsers'
@@ -48,6 +48,12 @@ const broken = (page: ParseResult) =>
 
 const PARSE_BROKEN = 'parse-broken: 0 listings and no empty-state marker'
 
+// ponytail: 10 pages ≈ 400 listings. The nieruchomosci-online search in use paginates 304 results
+// over 8 pages — its on-page "204 ogłoszenia" counter undercounts, so measure with `&p=N` rather
+// than trusting it. A pool deeper than the cap reports bumped old listings as new forever; that is
+// the symptom that says raise it.
+const MAX_PAGES = 10
+
 async function runLink(runId: number, link: Link) {
   const portal = detectPortal(link.url)
   if (!portal) throw new LinkError('unknown: unsupported portal')
@@ -82,14 +88,31 @@ async function runLink(runId: number, link: Link) {
     if (broken(page1)) throw new LinkError(PARSE_BROKEN)
   }
 
-  const live = liveListings(link.id)
+  const all = linkListings(link.id)
+  const live = all.filter((row) => row.removedAt === null)
   const isBaseline = link.baselinedAt === null
 
-  const parsed = [...page1.listings]
-  // Baselines always take both pages, to seed a window worth diffing against.
-  if (isBaseline || needsPage2(live, page1.listings)) {
-    const url2 = pageUrl(portal, link.url, 2)
-    if (url2) parsed.push(...(await load(url2)).listings)
+  // Keep paging while a page still holds ids we have never seen. nieruchomosci-online sorts by
+  // *modification* date, so an agent bumping an old listing floats it onto page 1 — it only reads
+  // as news if the seen-set never covered the rest of the pool. A baseline starts with an empty
+  // seen-set, so it walks to the cap on its own.
+  const seen = new Set(live.map((row) => row.externalId))
+  const parsed: Array<ParsedListing> = []
+  let page = page1
+  for (let n = 2; ; n++) {
+    const fresh = page.listings.some((l) => !seen.has(l.externalId))
+    for (const l of page.listings) seen.add(l.externalId)
+    parsed.push(...page.listings)
+    if (!fresh || n > MAX_PAGES) break
+    const url = pageUrl(portal, link.url, n)
+    if (!url) break
+    // Extra pages are best-effort: gratka answers a page past the last one with a hard 404, and
+    // losing page 2 must never cost us page 1.
+    try {
+      page = await load(url)
+    } catch {
+      break
+    }
   }
 
   // Pages 1 and 2 overlap while the portal reshuffles. First occurrence wins, and its index is
@@ -119,6 +142,12 @@ async function runLink(runId: number, link: Link) {
   }
 
   const known = new Map(live.map((row) => [row.externalId, row]))
+  // Kept out of `known` on purpose: a removed row must not be nominated for removal all over again.
+  const archived = new Map(
+    all
+      .filter((row) => row.removedAt !== null)
+      .map((row) => [row.externalId, row]),
+  )
   const changes = diff(live, fetched)
 
   // Confirmed before the write transaction — each one is a network round trip.
@@ -131,13 +160,26 @@ async function runLink(runId: number, link: Link) {
 
   tx(() => {
     for (const listing of changes.added) {
-      const row = insertListing({
-        ...listing,
-        linkId: link.id,
-        firstSeenAt: now,
-        lastSeenAt: now,
-        lastRank: rankOf.get(listing.externalId) ?? 0,
-      })
+      const lastRank = rankOf.get(listing.externalId) ?? 0
+      // A relist keeps its row — re-inserting it would violate listings_link_external and roll the
+      // whole transaction back. firstSeenAt stays put: the row is the permanent archive.
+      const previous = archived.get(listing.externalId)
+      if (previous)
+        updateListing(previous.id, {
+          ...listing,
+          removedAt: null,
+          lastSeenAt: now,
+          lastRank,
+        })
+      const row =
+        previous ??
+        insertListing({
+          ...listing,
+          linkId: link.id,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          lastRank,
+        })
       insertEvent({
         listingId: row.id,
         linkId: link.id,

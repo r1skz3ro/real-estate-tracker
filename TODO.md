@@ -2,16 +2,17 @@
 
 ## Global:
 
-- Projects should be listed on the left side in the side menu.
-- On top of the list there should be a button to create new project.
-- There should be optioon to update project title and description.
+- [x] Projects should be listed on the left side in the side menu.
+- [x] On top of the list there should be a button to create new project.
+- [x] There should be optioon to update project title and description.
+- [x] Every project in a separate route and page (`/projects/$projectId`).
 
 ## App architecture and file structure:
 
-- Filesshould be scoped in folder with all the related data, tests, styles, types and other files.
-- There should be separation in files between logic and ui.
-- Backend part should be separated considering MVC patterns.
-- Id like each folder contain clear readme file with short and concise description of the folder and its content.
+- [x] Filesshould be scoped in folder with all the related data, tests, styles, types and other files.
+- [x] There should be separation in files between logic and ui.
+- [x] Backend part should be separated considering MVC patterns.
+- [x] Id like each folder contain clear readme file with short and concise description of the folder and its content.
 
 ## Per link config and tracking:
 
@@ -21,6 +22,9 @@
 - initial fetch should list 10 last listings, so when link is added user is aware that it works. There should be information in that first section that this is initial fetch and shows only 10 listings.
 - There should be optioon to update link.
 - There should be logs for every link with status etc, they refresh when user click refresh and its filled with new logs. Api calls (if any), number of new listings (if any), progress, status of fetch.
+- After link is added before first fetch it should verify it the link is valid and supported.
+- There is missing time added of a listing.
+- There should be tracked history of every fetch (how many new listings, how many removed, etc. what was the status of the fetch).
 
 ## Common listing
 
@@ -31,5 +35,3 @@
 ### Misc:
 
 - The app should be hosted.
-- For some reason nieruchomosci-online returns results that are not new.
-- Gratka often fails.

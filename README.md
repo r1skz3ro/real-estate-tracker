@@ -161,3 +161,16 @@ pnpm db:generate / pnpm db:migrate     # drizzle-kit, schema in src/server/model
 data model, fetching and anti-bot handling, change detection, and which file does what.
 `phases/` holds the build plan this repo was written from, one file per phase; `CLAUDE.md` holds the
 architecture notes and the non-negotiable domain rules.
+
+### Kill all localhost servers for this project
+
+```bash
+lsof -tiTCP:3000,4173 -sTCP:LISTEN | xargs -r kill -9   # dev, preview
+```
+
+Nothing matched? Find the port and kill by PID:
+
+```bash
+lsof -iTCP -sTCP:LISTEN -nP | grep node
+kill -9 <PID>
+```

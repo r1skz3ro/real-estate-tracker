@@ -34,11 +34,14 @@ export function getProject(id: number) {
   return db.select().from(projects).where(eq(projects.id, id)).get()
 }
 
-export function createProject(data: { name: string }) {
+export function createProject(data: typeof projects.$inferInsert) {
   return db.insert(projects).values(data).returning().get()
 }
 
-export function updateProject(id: number, data: Partial<{ name: string }>) {
+export function updateProject(
+  id: number,
+  data: Partial<typeof projects.$inferInsert>,
+) {
   return db
     .update(projects)
     .set(data)
@@ -153,12 +156,10 @@ export function getRunStatus(runId: number) {
   }
 }
 
-export function liveListings(linkId: number) {
-  return db
-    .select()
-    .from(listings)
-    .where(and(eq(listings.linkId, linkId), isNull(listings.removedAt)))
-    .all()
+// Removed rows come back too: they are still the seen-set, and a relisted id must find its own row
+// rather than insert a second one.
+export function linkListings(linkId: number) {
+  return db.select().from(listings).where(eq(listings.linkId, linkId)).all()
 }
 
 export function insertListing(data: typeof listings.$inferInsert) {

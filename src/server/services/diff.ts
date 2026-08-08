@@ -65,13 +65,3 @@ export function diff(known: Array<Known>, fetched: Array<ParsedListing>): Diff {
 
   return { added, priced, removalCandidates }
 }
-
-// An entirely unfamiliar page 1 means more than a page of news arrived and there is probably more
-// below it. The length guard stops an empty search from vacuously passing and burning a request.
-export function needsPage2(
-  known: Array<Known>,
-  page1: Array<ParsedListing>,
-): boolean {
-  const knownIds = new Set(known.map((k) => k.externalId))
-  return page1.length > 0 && !page1.some((l) => knownIds.has(l.externalId))
-}

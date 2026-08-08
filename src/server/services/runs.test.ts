@@ -40,7 +40,7 @@ vi.mock('@/server/models/queries', () => ({
     state.runLinks.set(linkId, { ...state.runLinks.get(linkId), ...data }),
   updateLink: (id: number, data: Row) =>
     Object.assign(state.links.find((l) => l.id === id) ?? {}, data),
-  liveListings: () => [],
+  linkListings: () => [],
   insertListing: (data: Row) => ({ ...data, id: 1 }),
   updateListing: () => {},
   insertEvent: (data: Row) => state.events.push(data),
@@ -120,6 +120,44 @@ test('zero parsed with no empty-state marker escalates once, then fails the link
   expect(fetchPage.mock.calls[1]?.[0]).toMatchObject({ fetchMode: 'browser' })
   expect(state.runLinks.get(1)?.error).toMatch(/^parse-broken:/)
   expect(state.runStatus).toBe('failed')
+})
+
+// Gratka answers a page past the last one with a hard 404. Losing page 2 must not cost page 1 —
+// and must not leave baselinedAt null, which re-runs the baseline into the same 404 forever.
+test('a 404 on page 2 costs the extra page, not the link', async () => {
+  state.links = [link(1)]
+  fetchPage.mockImplementation((_l: unknown, url: string) =>
+    Promise.resolve(
+      /page=/.test(url)
+        ? { ...page({}), status: 404 }
+        : page({ listings: [listing('a'), listing('b')] }),
+    ),
+  )
+
+  await startRun(1).finished
+
+  expect(fetchPage).toHaveBeenCalledTimes(2)
+  expect(state.runLinks.get(1)).toMatchObject({ status: 'ok', parsedCount: 2 })
+  expect(state.links[0]?.baselinedAt).toBeInstanceOf(Date)
+})
+
+test('paging follows new ids and stops once a page brings none', async () => {
+  state.links = [link(1)]
+  fetchPage.mockImplementation((_l: unknown, url: string) =>
+    Promise.resolve(
+      page({
+        listings: /page=/.test(url)
+          ? [listing('c'), listing('d')]
+          : [listing('a'), listing('b')],
+      }),
+    ),
+  )
+
+  await startRun(1).finished
+
+  // page 1 (a,b) → page 2 (c,d) → page 3 (c,d again, nothing new) → stop.
+  expect(fetchPage).toHaveBeenCalledTimes(3)
+  expect(state.runLinks.get(1)).toMatchObject({ status: 'ok', parsedCount: 4 })
 })
 
 test('zero parsed with an empty-state marker is a normal quiet result', async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { diff, needsPage2 } from './diff'
+import { diff } from './diff'
 import type { Known } from './diff'
 import type { ParsedListing } from '@/server/scraping/parsers/util'
 
@@ -109,15 +109,4 @@ test('an unchanged listing produces no events at all', () => {
   )
 
   expect(result).toEqual({ added: [], priced: [], removalCandidates: [] })
-})
-
-// Page 2 only when page 1 is entirely unfamiliar — more than a page of news arrived, so there is
-// probably more below. An empty page 1 must not vacuously qualify and burn a request.
-test.each([
-  ['all new', [known('x', 0)], [listing('a'), listing('b')], true],
-  ['one known', [known('a', 0)], [listing('a'), listing('b')], false],
-  ['empty page 1', [known('a', 0)], [], false],
-  ['nothing known', [], [listing('a')], true],
-] as const)('needsPage2 %s -> %j', (_name, seen, page1, expected) => {
-  expect(needsPage2([...seen], [...page1])).toBe(expected)
 })
