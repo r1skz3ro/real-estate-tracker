@@ -23,7 +23,48 @@ pnpm vitest run -t "test name"        # single test by name
 pnpm exec playwright install chromium # required once; Chromium only, not the full browser set
 ```
 
-`pnpm db:generate` / `pnpm db:migrate` (drizzle-kit) manage the SQLite schema — see `src/db/`.
+`pnpm db:generate` / `pnpm db:migrate` (drizzle-kit) manage the SQLite schema — see
+`src/server/models/`.
+
+## Project structure
+
+Every folder under `src/` carries a `README.md` with what belongs in it, what doesn't, and its one
+gotcha. Read the folder's README before adding a file to it; those are the authority, this is the
+map.
+
+```
+src/
+  routes/       thin route shells — def, loader, composition (~20-60 lines each)
+  features/     projects/ links/ runs/ findings/   ← all app UI
+  components/   ui/ only: shadcn CLI output
+  lib/          cross-feature helpers (format.ts, cn())
+  server/       the entire backend
+    controllers/  createServerFn: validate → delegate → return
+    services/     business rules, orchestration, pure domain logic
+    models/       drizzle schema + flat query functions
+    scraping/     portals.ts, fetch/, parsers/
+  integrations/ third-party wiring (React Query provider)
+```
+
+**Backend layering.** `controllers → services → {models, scraping}`. A service exists only where
+there is logic: `projects` and `findings` have none worth a module, so their controllers call the
+model directly — a pass-through service is noise, not symmetry. `models/schema.ts` must import
+nothing but drizzle (drizzle-kit resolves it outside the bundler).
+
+**Frontend split.** `.tsx` is markup and props; `.ts` is logic and its test. Hooks, derivations and
+formatting go in `.ts` siblings — that is what makes them testable, since vitest runs
+`src/**/*.test.ts` under plain node with no jsdom and no React plugin. One `.tsx` per major UI
+block; small private subcomponents stay in their parent file.
+
+**Feature folders.** No `index.ts` barrels — a barrel re-exporting a component next to a contract is
+how server code reaches the browser bundle. Values both sides need (zod schemas, `MAX_LINKS`) live
+in the feature as dependency-free leaves and are imported _from_ `server/`; that is the only
+server → client dependency.
+
+**The bundle rule.** Only `createServerFn` handler bodies are stripped from the client build.
+Reference a model or service at module scope in a controller and better-sqlite3 follows the import
+into the browser, killing hydration. `pnpm build` still succeeds when this breaks — the check that
+catches it is `grep -rE "better.sqlite3|playwright" dist/client/`, which must find nothing.
 
 ## Build plan
 
@@ -58,30 +99,40 @@ each one fixes a bug that was actually observed.
 
 ## Architecture gotchas
 
-- `src/server/portals.ts` is the single source of truth for portal identity (hostname regex →
-  `fetchMode`) — don't re-derive portal logic elsewhere.
+- `src/server/scraping/portals.ts` is the single source of truth for portal identity (hostname
+  regex → `fetchMode`) — don't re-derive portal logic elsewhere.
 - `fetchPage()` unifies `http.ts`/`browser.ts` and escalates HTTP → browser once on a detected
   block, persisting that escalation onto the link.
 - Parsers anchor on embedded ld+json/`__NEXT_DATA__` or `data-*` attributes — **never CSS classes**
   (portals churn those). `emptyState` must come from a real "portal said zero" signal, never from
   `listings.length === 0` (that would make a broken parser look like a quiet week). Every portal
   pads results with non-matching offers (recommendations, wider radius) that parsers must filter.
-  `src/server/parsers/__fixtures__/` is the only real fixture-based test suite in the project — it's
-  the only code that silently rots when a portal changes.
-- Diff engine (`src/server/diff.ts`) is pure — no DB, no network.
-- `startRun()` isolates each link in its own try/catch so one dead portal never aborts the run.
+  `src/server/scraping/parsers/__fixtures__/` is the only real fixture-based test suite in the
+  project — it's the only code that silently rots when a portal changes.
+- Diff engine (`src/server/services/diff.ts`) is pure — no DB, no network.
+- `startRun()` (`src/server/services/runs.ts`) isolates each link in its own try/catch so one dead
+  portal never aborts the run.
+- `reasonFor()` in `services/runs.ts` writes `<category>: <detail>` into `links.lastError`; the UI
+  parses that prefix back in `linkError()` (`src/lib/format.ts`) to pick amber vs red. Add a
+  category on one side and add it to the other.
 - Refresh is **manual only** — there is no scheduler, no background process, no cron. A run starts
   when the user clicks Refresh (`startRunFn`) and never any other way; don't add a timer.
 - DB requires `foreign_keys = ON` set explicitly (SQLite defaults it off, so cascading deletes
-  silently no-op without it). Plain exported query functions in `src/db/queries.ts`, no repository
-  classes.
+  silently no-op without it). Plain exported query functions in `src/server/models/queries.ts`, no
+  repository classes.
+- Two data planes on purpose: router loaders own projects and links (a write ends in
+  `router.invalidate()`), React Query owns run polling and the findings timeline (a write ends in
+  `queryClient.invalidateQueries()`). Several actions touch both and must invalidate both.
 
 ## Conventions
 
-- Path aliases `#/*` and `@/*` both resolve to `./src/*`.
+- One path alias: `@/*` → `./src/*`. Use it across folders, relative imports within one.
 - TypeScript `strict` + `noUncheckedIndexedAccess` + `noUnusedLocals`/`noUnusedParameters` are
   deliberate (parser code indexes into arrays constantly) — don't relax.
-- Don't delete or "clean up" `src/server/parsers/__fixtures__/` — parsers match them byte-for-byte.
+- Don't delete or "clean up" `src/server/scraping/parsers/__fixtures__/` — parsers match them
+  byte-for-byte.
+- Adding a folder under `src/` means adding its `README.md` too. Keep them structural — what
+  belongs, what doesn't, the gotcha. A file inventory rots on the next commit; a rule doesn't.
 - `data/` (SQLite file + Playwright `storageState`) is gitignored, created at runtime, never
   committed.
 - `pnpm format` runs `eslint --fix` before `prettier --write` — that order matters, ESLint's

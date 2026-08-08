@@ -129,14 +129,14 @@ A ten-link project therefore takes a minute or two.
 The symptom is a link going red with **"page layout changed — parser needs updating"**: the fetch
 worked, but the parser found 0 listings and the page carried no "we found nothing" marker either.
 
-Parsers live in `src/server/parsers/`, one per portal, and are tested byte-for-byte against saved
-HTML in `src/server/parsers/__fixtures__/` — the only code in this project that rots silently when
+Parsers live in `src/server/scraping/parsers/`, one per portal, and are tested byte-for-byte against saved
+HTML in `src/server/scraping/parsers/__fixtures__/` — the only code in this project that rots silently when
 someone else changes their site. To fix:
 
 1. Open the failing search in a browser, save the page HTML over the matching
    `__fixtures__/<portal>-search.html`. Do the same for a deliberately zero-result search
    (`<portal>-empty.html`) if the empty-state marker is what moved.
-2. `pnpm vitest run src/server/parsers/parsers.test.ts` — the assertions will point at what moved.
+2. `pnpm vitest run src/server/scraping/parsers/parsers.test.ts` — the assertions will point at what moved.
 3. Fix the parser. Anchor on embedded `ld+json` / `__NEXT_DATA__` / `data-*` attributes, **never on
    CSS classes** — portals churn those constantly.
 4. Never derive `emptyState` from `listings.length === 0`; it must come from a real "the portal said
@@ -154,7 +154,7 @@ pnpm lint / pnpm format / pnpm check   # eslint / eslint --fix + prettier / pret
 pnpm typecheck                         # tsc --noEmit
 pnpm test                              # vitest run
 pnpm generate-routes                   # regenerate src/routeTree.gen.ts
-pnpm db:generate / pnpm db:migrate     # drizzle-kit, schema in src/db/schema.ts
+pnpm db:generate / pnpm db:migrate     # drizzle-kit, schema in src/server/models/schema.ts
 ```
 
 [`docs/architecture.md`](./docs/architecture.md) is the full technical walkthrough — process model,

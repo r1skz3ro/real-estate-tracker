@@ -1,19 +1,17 @@
 import {
   HeadContent,
-  Link,
   Outlet,
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import { TriangleAlert } from 'lucide-react'
 
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
-import { listProjectsFn } from '../server/projects'
-import { Badge } from '@/components/ui/badge'
+import TanStackQueryDevtools from '@/integrations/tanstack-query/devtools'
+import { Sidebar } from '@/features/projects/Sidebar'
+import { listProjectsFn } from '@/server/controllers/projects'
 
-import appCss from '../styles.css?url'
+import appCss from '@/styles.css?url'
 
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -54,44 +52,7 @@ function RootLayout() {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="w-64 shrink-0 border-r border-border bg-card p-4">
-        <Link
-          to="/"
-          className="block px-2 text-lg font-semibold tracking-tight"
-        >
-          Estate Tracker
-        </Link>
-        {projects.length === 0 ? (
-          <p className="mt-6 px-2 text-sm text-muted-foreground">
-            No projects yet
-          </p>
-        ) : (
-          <nav className="mt-6 space-y-0.5">
-            {projects.map((project) => (
-              <Link
-                key={project.id}
-                to="/projects/$projectId"
-                params={{ projectId: String(project.id) }}
-                activeProps={{
-                  className: 'bg-accent text-accent-foreground font-medium',
-                }}
-                className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-              >
-                <span className="truncate">{project.name}</span>
-                <span className="flex shrink-0 items-center gap-1.5">
-                  {project.failing > 0 && (
-                    <TriangleAlert
-                      className="size-3.5 text-amber-500"
-                      aria-label={`${project.failing} failing ${project.failing === 1 ? 'link' : 'links'}`}
-                    />
-                  )}
-                  {project.unread > 0 && <Badge>{project.unread}</Badge>}
-                </span>
-              </Link>
-            ))}
-          </nav>
-        )}
-      </aside>
+      <Sidebar projects={projects} />
       <main className="min-w-0 flex-1 p-8">
         <Outlet />
       </main>

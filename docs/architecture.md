@@ -35,20 +35,25 @@ All state is the one SQLite file plus a cookie jar next to it.
 
 The whole system is roughly 2,000 lines of TypeScript across `src/`. Here is the map:
 
-| Directory               | Responsibility                                                           |
-| ----------------------- | ------------------------------------------------------------------------ |
-| `src/routes/`           | Three file-based routes: the shell/sidebar, the project list, a project. |
-| `src/components/`       | `findings.tsx` (the changes timeline) + `ui/` (shadcn/ui primitives).    |
-| `src/lib/`              | `format.ts` (Intl formatters, error copy), `utils.ts` (`cn()`).          |
-| `src/server/*.ts`       | The RPC boundary — `createServerFn` wrappers with zod validators.        |
-| `src/server/fetch/`     | HTTP + Playwright fetching, block detection, the politeness mutex.       |
-| `src/server/parsers/`   | One parser per portal + byte-for-byte HTML fixtures.                     |
-| `src/server/diff.ts`    | Pure change detection. No DB, no network.                                |
-| `src/server/run.ts`     | The orchestrator: fetch → parse → diff → persist.                        |
-| `src/server/portals.ts` | Single source of truth for portal identity.                              |
-| `src/db/`               | Drizzle schema, the connection singleton, every query function.          |
-| `drizzle/`              | Generated SQL migrations (committed).                                    |
-| `data/`                 | The SQLite file and Playwright cookies (gitignored, runtime-created).    |
+| Directory                        | Responsibility                                                        |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `src/routes/`                    | Three file-based routes. Shells only: def, loader, composition.       |
+| `src/features/`                  | All app UI, one folder per feature: projects, links, runs, findings.  |
+| `src/components/ui/`             | shadcn/ui primitives (CLI-generated).                                 |
+| `src/lib/`                       | `format.ts` (Intl formatters, error copy), `utils.ts` (`cn()`).       |
+| `src/server/controllers/`        | The RPC boundary — `createServerFn` wrappers with zod validators.     |
+| `src/server/services/`           | Business logic: link rules, run orchestration, the diff engine.       |
+| `src/server/services/diff.ts`    | Pure change detection. No DB, no network.                             |
+| `src/server/services/runs.ts`    | The orchestrator: fetch → parse → diff → persist.                     |
+| `src/server/models/`             | Drizzle schema, the connection singleton, every query function.       |
+| `src/server/scraping/portals.ts` | Single source of truth for portal identity.                           |
+| `src/server/scraping/fetch/`     | HTTP + Playwright fetching, block detection, the politeness mutex.    |
+| `src/server/scraping/parsers/`   | One parser per portal + byte-for-byte HTML fixtures.                  |
+| `drizzle/`                       | Generated SQL migrations (committed).                                 |
+| `data/`                          | The SQLite file and Playwright cookies (gitignored, runtime-created). |
+
+Every folder under `src/` carries a `README.md` stating what belongs in it, what doesn't, and its
+one gotcha — those are the authority when adding a file; this table is the overview.
 
 ---
 
@@ -67,12 +72,13 @@ existence, and it stays for the life of the process:
 
 ```
 a /_serverFn request
-  └─ #/server/projects | runs | links
-       └─ #/db/queries
-            └─ #/db/index  ──► export const db = createDb()   ← the file is opened HERE
+  └─ @/server/controllers/projects | runs | links
+       └─ @/server/services/*            (where the operation has business logic)
+            └─ @/server/models/queries
+                 └─ @/server/models/index  ──► export const db = createDb()   ← opened HERE
 ```
 
-`createDb()` in `src/db/index.ts` is the whole connection story:
+`createDb()` in `src/server/models/index.ts` is the whole connection story:
 
 ```ts
 export function createDb(file = 'data/estate.db') {
@@ -96,7 +102,7 @@ Four consequences worth internalising:
 1. **Migrations run on first use.** `pnpm db:migrate` exists but is optional — a fresh clone just
    works.
 2. **`foreign_keys = ON` is not optional.** SQLite defaults it off, and every cascade in this schema
-   depends on it. `src/db/schema.test.ts` exists purely to prove the pragma is live.
+   depends on it. `src/server/models/schema.test.ts` exists purely to prove the pragma is live.
 3. **Both `data/estate.db` and `drizzle/` are relative paths.** Start the process from the repo root
    or you get a second, empty database somewhere else.
 4. **The connection is a module singleton, never closed.** `createDb` is exported only so tests can
@@ -119,7 +125,7 @@ optimizeDeps: { exclude: ['playwright'] },
 **There is no database running in the background.** `better-sqlite3` is a native library compiled
 into the Node process — synchronous function calls straight into SQLite's C code. Nothing listens on
 a port, nothing needs starting, nothing needs stopping. Because every call is synchronous, none of
-the query functions in `src/db/queries.ts` are `async`, and transactions are a plain callback.
+the query functions in `src/server/models/queries.ts` are `async`, and transactions are a plain callback.
 
 Everything persistent is in `data/`, which is gitignored and created at runtime:
 
@@ -149,7 +155,7 @@ projects ─┬─* links ─┬─* listings ─* events
                      └─* events
 ```
 
-Everything is defined in `src/db/schema.ts` using Drizzle's SQLite builder. All primary keys are
+Everything is defined in `src/server/models/schema.ts` using Drizzle's SQLite builder. All primary keys are
 `integer autoincrement`; all timestamps are `integer` columns with `mode: 'timestamp_ms'`, so they
 are JS `Date` objects in code and millisecond epochs on disk.
 
@@ -165,7 +171,7 @@ A set of searches refreshed together.
 
 ### `links`
 
-One saved search URL. Capped at 10 per project — enforced in `src/server/links.ts` (`MAX_LINKS`),
+One saved search URL. Capped at 10 per project — enforced in `src/server/controllers/links.ts` (`MAX_LINKS`),
 not in the schema.
 
 | Column        | Type         | Notes                                                             |
@@ -273,11 +279,11 @@ Every foreign key is `ON DELETE cascade`:
   project or link deletion by the user removes anything.
 
 There are no `CHECK` constraints and no Drizzle enums: the string unions above are documented in
-comments and enforced at the zod boundary in `src/server/*.ts`.
+comments and enforced at the zod boundary in `src/server/controllers/*.ts`.
 
 ### Migrations
 
-`drizzle.config.ts` points drizzle-kit at `src/db/schema.ts` → `drizzle/`. Two migrations exist:
+`drizzle.config.ts` points drizzle-kit at `src/server/models/schema.ts` → `drizzle/`. Two migrations exist:
 
 - `drizzle/0000_unknown_puma.sql` — all six tables and five indexes.
 - `drizzle/0001_brown_shadow_king.sql` — adds `listings.description` and `listings.details`.
@@ -291,12 +297,12 @@ prettier-ignored but committed.
 
 ## 5. Fetching a portal page
 
-This is the part with the most non-obvious behaviour. It lives in `src/server/fetch/` (three files)
-plus `src/server/portals.ts`.
+This is the part with the most non-obvious behaviour. It lives in `src/server/scraping/fetch/` (three files)
+plus `src/server/scraping/portals.ts`.
 
 ### 5a. Portal identity
 
-`src/server/portals.ts` is the **single source of truth** for which portal a URL belongs to and how
+`src/server/scraping/portals.ts` is the **single source of truth** for which portal a URL belongs to and how
 it must be fetched. Nothing else re-derives it.
 
 ```ts
@@ -332,13 +338,13 @@ adresowo encodes the page in a path token), and `deriveLabel()` produces the def
 
 ### 5b. Two ways to fetch
 
-**`httpFetch(url)`** — `src/server/fetch/http.ts`. Plain `fetch()` with a complete Chrome-141-on-macOS
+**`httpFetch(url)`** — `src/server/scraping/fetch/http.ts`. Plain `fetch()` with a complete Chrome-141-on-macOS
 navigation header set: `user-agent`, `accept`, `accept-language: pl-PL,pl;q=0.9,…`, `sec-ch-ua`,
 `sec-ch-ua-mobile`, `sec-ch-ua-platform: "macOS"`, `sec-fetch-dest/mode/site/user`,
 `upgrade-insecure-requests`. Timeout `AbortSignal.timeout(25_000)`. No cookie jar, no retries.
 Returns `{ ok, status, html, blocked, url }`, where `url` is post-redirect.
 
-**`browserFetch(url, waitFor?)`** — `src/server/fetch/browser.ts`. Playwright Chromium, with a
+**`browserFetch(url, waitFor?)`** — `src/server/scraping/fetch/browser.ts`. Playwright Chromium, with a
 module-level singleton browser and context:
 
 ```ts
@@ -394,7 +400,7 @@ with `blocked:` and the UI says so; nothing tries harder than that.
 
 ### 5d. `fetchPage()` — one entry point, plus the politeness mutex
 
-`src/server/fetch/index.ts` unifies the two paths and owns the global serialization. The mutex is the
+`src/server/scraping/fetch/index.ts` unifies the two paths and owns the global serialization. The mutex is the
 least guessable code in the repo:
 
 ```ts
@@ -465,7 +471,7 @@ fetchPage(link, url)
                           (permanent — nothing ever demotes a link back to http)
 ```
 
-**Block detection** (`src/server/fetch/http.ts`) is two signals, one of them size-gated:
+**Block detection** (`src/server/scraping/fetch/http.ts`) is two signals, one of them size-gated:
 
 ```ts
 const CHALLENGE = /Request blocked|captcha|cf-browser-verification|DataDome/i
@@ -501,7 +507,7 @@ export async function verifyRemoved(link: Link, url: string): Promise<boolean> {
 ```
 
 Two portals answer a dead listing with HTTP 200 and an error body, so they need explicit markers
-(`src/server/portals.ts`):
+(`src/server/scraping/portals.ts`):
 
 ```ts
 export const EXPIRED_MARKERS: Partial<Record<Portal, RegExp>> = {
@@ -526,7 +532,7 @@ one.
 
 ## 6. Parsing a portal page
 
-`src/server/parsers/` holds one parser per portal plus shared helpers. Every parser has the same
+`src/server/scraping/parsers/` holds one parser per portal plus shared helpers. Every parser has the same
 signature and returns the same shape:
 
 ```ts
@@ -537,7 +543,7 @@ export type ParseResult = {
 }
 ```
 
-`src/server/parsers/index.ts` maps them by portal in a `Record<Portal, Parser>`, so adding a portal
+`src/server/scraping/parsers/index.ts` maps them by portal in a `Record<Portal, Parser>`, so adding a portal
 without a parser is a type error.
 
 ### The two rules parsers obey
@@ -588,7 +594,7 @@ markup. Those are real results of the search and are kept (15 of the 25 listings
 
 ### The fixtures — the only code that rots on its own
 
-`src/server/parsers/__fixtures__/` holds ten live captures, `<portal>-search.html` and
+`src/server/scraping/parsers/__fixtures__/` holds ten live captures, `<portal>-search.html` and
 `<portal>-empty.html` for all five portals (~7.5 MB total). `parsers.test.ts` parses them
 byte-for-byte, which is why `**/__fixtures__/` is in `.prettierignore`: reformatting them would
 invalidate the tests.
@@ -623,7 +629,7 @@ See [`docs/portals.md`](./portals.md) for the exact JSON paths, selectors and pa
 
 ---
 
-## 7. Deciding what changed — `src/server/diff.ts`
+## 7. Deciding what changed — `src/server/services/diff.ts`
 
 A pure function. No database, no network, no clock. Given what we knew and what we just fetched, it
 returns what changed:
@@ -696,7 +702,7 @@ it. The length guard stops an empty search from vacuously passing and burning a 
 
 ---
 
-## 8. A refresh run, end to end — `src/server/run.ts`
+## 8. A refresh run, end to end — `src/server/services/runs.ts`
 
 This is where fetching, parsing, diffing and persistence come together.
 
@@ -878,12 +884,12 @@ client-side signature is always `fn({ data })`.
 
 Fourteen of them, grouped by module:
 
-| Module                   | Functions                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------- |
-| `src/server/projects.ts` | `listProjectsFn` `getProjectFn` `createProjectFn` `updateProjectFn` `deleteProjectFn` |
-| `src/server/links.ts`    | `listLinksFn` `addLinkFn` `renameLinkFn` `deleteLinkFn`                               |
-| `src/server/runs.ts`     | `startRunFn` `getRunStatusFn`                                                         |
-| `src/server/findings.ts` | `listFindingsFn` `markReadFn` `markAllReadFn`                                         |
+| Module                               | Functions                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `src/server/controllers/projects.ts` | `listProjectsFn` `getProjectFn` `createProjectFn` `updateProjectFn` `deleteProjectFn` |
+| `src/server/controllers/links.ts`    | `listLinksFn` `addLinkFn` `renameLinkFn` `deleteLinkFn`                               |
+| `src/server/controllers/runs.ts`     | `startRunFn` `getRunStatusFn`                                                         |
+| `src/server/controllers/findings.ts` | `listFindingsFn` `markReadFn` `markAllReadFn`                                         |
 
 Each carries a `.validator(zodSchema)` — that is the trust boundary. `addLinkFn` is the fullest
 example: valid URL, `https:` only, a recognised portal, under the 10-link cap, not a duplicate. The
@@ -892,13 +898,18 @@ forms mirror some of those rules for immediate feedback, but the server's checks
 **One structural constraint governs these files**, and breaking it breaks the app in a confusing way:
 
 ```ts
-// Everything here lives inside a handler on purpose. Only handler bodies are stripped from the
-// client bundle; anything else in this file keeps its `#/db/queries` import alive and drags
-// better-sqlite3 into the browser, which kills hydration.
+// Every server symbol above is referenced only inside a handler body, on purpose. Handler bodies
+// are the only thing stripped from the client bundle; touch one of these imports at module scope
+// and better-sqlite3 follows it into the browser, which kills hydration.
 ```
 
-So: no helper functions, no constants derived from DB imports at module scope in `src/server/*.ts` —
-put the logic inside `.handler()`.
+So: in `src/server/controllers/*.ts`, no helper functions and no constants derived from a service or
+model import at module scope — the delegating call goes inside `.handler()`. This is what lets
+`addLinkFn` delegate to `src/server/services/links.ts`: the service is referenced only inside the
+handler, so the import tree-shakes out of the client build exactly as the inline version did.
+
+`pnpm build` succeeds even when this is broken. The check that catches it is
+`grep -rE "better.sqlite3|playwright" dist/client/`, which must find nothing.
 
 ### Two data planes, on purpose
 
@@ -942,7 +953,7 @@ refreshes the query; a finished run does both.
    }, [run.data, running, router, queryClient, project.id])
    ```
 
-### The findings timeline — `src/components/findings.tsx`
+### The findings timeline — `src/features/findings/Findings.tsx`
 
 The main read surface. Runs newest-first, each with its events:
 
@@ -981,9 +992,13 @@ render dark. `src/components/ui/` is CLI-generated. The rules for changing any o
 
 ### Conventions
 
-- **Path aliases**: `#/*` and `@/*` both resolve to `./src/*`. `#/*` is a real Node subpath import
-  (declared in `package.json`), used for `#/db/*` and `#/server/*`; `@/*` is the shadcn alias used for
-  UI and lib imports.
+- **Path alias**: one, `@/*` → `./src/*` (`tsconfig.json`, resolved natively by Vite and vitest via
+  `resolve: { tsconfigPaths: true }`). Use it across folders, relative imports within one. There is
+  deliberately no second alias: `src/server/models/schema.ts` imports nothing but drizzle, so
+  drizzle-kit — which resolves that file outside the bundler — needs no alias support at all.
+- **`.tsx` is markup, `.ts` is logic.** Hooks, derivations and formatting live in `.ts` siblings
+  inside the feature folder, which is what makes them testable: vitest runs `src/**/*.test.ts`
+  under plain node, with no jsdom and no React plugin.
 - **TypeScript**: `strict`, plus `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`,
   `noFallthroughCasesInSwitch`. The indexed-access flag is deliberate — parser code indexes into
   arrays and regex match groups constantly, and it is what forces the `?? null` fallbacks you see.
@@ -996,16 +1011,16 @@ render dark. `src/components/ui/` is CLI-generated. The rules for changing any o
 
 `pnpm test` runs vitest in a Node environment over `src/**/*.test.ts` — no jsdom, no component tests.
 
-| Suite                                | Guards                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------- |
-| `src/server/parsers/parsers.test.ts` | Fixture parsing: counts, ids, padding filters, empty state, garbage page. |
-| `src/server/parsers/util.test.ts`    | Polish number parsing, price-per-m², URL resolution.                      |
-| `src/server/diff.test.ts`            | Window semantics — scroll-off is not a removal, dedupe, price epsilon.    |
-| `src/server/run.test.ts`             | Dead portal isolated; baseline emits nothing; escalate exactly once.      |
-| `src/server/portals.test.ts`         | Hostname matching (including the `.evil.com` case), page URLs, labels.    |
-| `src/db/schema.test.ts`              | `foreign_keys = ON` — deletes a project, asserts the cascade happened.    |
-| `src/db/queries.test.ts`             | Unread counts per project; findings grouped by run, quiet runs kept.      |
-| `src/lib/format.test.ts`             | Error category → red/amber copy, including unrecognised categories.       |
+| Suite                                         | Guards                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/server/scraping/parsers/parsers.test.ts` | Fixture parsing: counts, ids, padding filters, empty state, garbage page. |
+| `src/server/scraping/parsers/util.test.ts`    | Polish number parsing, price-per-m², URL resolution.                      |
+| `src/server/services/diff.test.ts`            | Window semantics — scroll-off is not a removal, dedupe, price epsilon.    |
+| `src/server/services/runs.test.ts`            | Dead portal isolated; baseline emits nothing; escalate exactly once.      |
+| `src/server/scraping/portals.test.ts`         | Hostname matching (including the `.evil.com` case), page URLs, labels.    |
+| `src/server/models/schema.test.ts`            | `foreign_keys = ON` — deletes a project, asserts the cascade happened.    |
+| `src/server/models/queries.test.ts`           | Unread counts per project; findings grouped by run, quiet runs kept.      |
+| `src/lib/format.test.ts`                      | Error category → red/amber copy, including unrecognised categories.       |
 
 ### What breaks first
 

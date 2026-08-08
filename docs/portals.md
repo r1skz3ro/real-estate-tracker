@@ -3,7 +3,7 @@
 Everything portal-specific that was established by hand against the live sites. When a scrape breaks
 in eight months, start here rather than re-deriving it.
 
-Code: `src/server/portals.ts` (identity, `ready` selector, expired markers, pagination),
+Code: `src/server/scraping/portals.ts` (identity, `ready` selector, expired markers, pagination),
 `src/server/parsers/*.ts` (extraction), `src/server/parsers/__fixtures__/` (saved HTML the parser
 tests match byte-for-byte).
 
@@ -18,7 +18,7 @@ tests match byte-for-byte).
 | olx.pl                  | **browser** | first `[data-testid="listing-grid"]` → `[data-cy="l-card"]` → `a[href*="/oferta/"]` → `-ID<code>` | `[data-testid="total-count"]` reads 0 | `?page=N`           |
 
 Browser `ready` selectors (what the Playwright path waits for before reading the DOM) are in
-`PORTALS` in `src/server/portals.ts`.
+`PORTALS` in `src/server/scraping/portals.ts`.
 
 ## Expired-listing markers
 
