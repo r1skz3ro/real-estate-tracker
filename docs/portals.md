@@ -4,8 +4,8 @@ Everything portal-specific that was established by hand against the live sites. 
 in eight months, start here rather than re-deriving it.
 
 Code: `src/server/scraping/portals.ts` (identity, `ready` selector, expired markers, pagination),
-`src/server/parsers/*.ts` (extraction), `src/server/parsers/__fixtures__/` (saved HTML the parser
-tests match byte-for-byte).
+`src/server/scraping/parsers/*.ts` (extraction), `src/server/scraping/parsers/__fixtures__/` (saved
+HTML the parser tests match byte-for-byte).
 
 ## Summary
 
@@ -33,7 +33,7 @@ not recorded yet _delays_ a removal rather than inventing one.
 | gratka               | real HTTP 404                                                                          |
 | adresowo, olx        | none recorded yet — they ride the HTTP status plus the shared wording fallback         |
 
-Shared fallback regex (`EXPIRED_FALLBACK` in `src/server/fetch/index.ts`): anchored on "Ogłoszenie",
+Shared fallback regex (`EXPIRED_FALLBACK` in `src/server/scraping/fetch/index.ts`): anchored on "Ogłoszenie",
 because a bare `zakończone`/`archiwalne` also occurs inside live listing descriptions and a false
 positive here is exactly the phantom "sold!" the removal rules exist to prevent. A redirect to the
 site root also counts as gone.
@@ -110,4 +110,5 @@ is built by appending the raw `&p=N` string.
 - Block detection: status 403/429/503, or a challenge marker (`Request blocked`, `captcha`,
   `cf-browser-verification`, `DataDome`) in a body under 20 KB. The size gate matters — real search
   pages ship recaptcha keys, so the marker alone false-positives on three of the five portals.
-- Page 2 is only fetched when the diff needs it, or always on a baseline run.
+- The run keeps paging while a page still holds ids the seen-set has never covered, capped at
+  `MAX_PAGES = 10`. A baseline starts with an empty seen-set, so it walks to the cap on its own.

@@ -159,8 +159,10 @@ pnpm db:generate / pnpm db:migrate     # drizzle-kit, schema in src/server/model
 
 [`docs/architecture.md`](./docs/architecture.md) is the full technical walkthrough — process model,
 data model, fetching and anti-bot handling, change detection, and which file does what.
-`phases/` holds the build plan this repo was written from, one file per phase; `CLAUDE.md` holds the
-architecture notes and the non-negotiable domain rules.
+[`docs/architektura.pl.md`](./docs/architektura.pl.md) is the same system explained in Polish, written
+for a reader who knows frontend and is new to backend: more "why this and not that", fewer column
+tables. `phases/` holds the build plan this repo was written from, one file per phase; `CLAUDE.md`
+holds the architecture notes and the non-negotiable domain rules.
 
 ### Kill all localhost servers for this project
 

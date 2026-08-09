@@ -48,10 +48,10 @@ const broken = (page: ParseResult) =>
 
 const PARSE_BROKEN = 'parse-broken: 0 listings and no empty-state marker'
 
-// ponytail: 10 pages ≈ 400 listings. The nieruchomosci-online search in use paginates 304 results
-// over 8 pages — its on-page "204 ogłoszenia" counter undercounts, so measure with `&p=N` rather
-// than trusting it. A pool deeper than the cap reports bumped old listings as new forever; that is
-// the symptom that says raise it.
+// ponytail: a backstop, not a target — the loop below stops on its own once a page holds nothing
+// new, and a portal that pads past its own results is the parser's job to filter (see
+// nieruchomosciOnline's `PADDING`), not this cap's. Raise it only if a real pool is deeper than
+// this, whose symptom is bumped old listings reported as new forever.
 const MAX_PAGES = 10
 
 async function runLink(runId: number, link: Link) {

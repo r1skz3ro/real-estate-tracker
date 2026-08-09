@@ -48,8 +48,9 @@ export function diff(known: Array<Known>, fetched: Array<ParsedListing>): Diff {
     }
   }
 
-  // The window is newest-first and ~2 pages deep, so old listings scroll off the bottom on their
-  // own. Only what sat *above* a survivor is genuinely gone. -1 when nothing survived: the whole
+  // The window is newest-first and only as deep as the portal had results, so old listings scroll
+  // off the bottom on their own. Only what sat *above* a survivor is genuinely gone. -1 when
+  // nothing survived: the whole
   // window turned over and we cannot tell, so nominate nothing.
   const deepestPresent = known.reduce(
     (deepest, k) =>

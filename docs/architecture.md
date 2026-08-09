@@ -5,9 +5,11 @@ stored, how a portal page is fetched, how bot protection is handled, how "this l
 decided, and which file is responsible for what.
 
 This document describes the system as built. [`README.md`](../README.md) covers setup and daily use,
-[`docs/portals.md`](./portals.md) is the per-portal extraction reference, [`CLAUDE.md`](../CLAUDE.md)
-is the rule sheet for people (and agents) changing the code, and `phases/` holds the build plan the
-repo was written from.
+[`docs/portals.md`](./portals.md) is the per-portal extraction reference,
+[`docs/architektura.pl.md`](./architektura.pl.md) is the Polish walkthrough of the same system
+(written for a frontend reader — more rationale, fewer column tables), [`CLAUDE.md`](../CLAUDE.md) is
+the rule sheet for people (and agents) changing the code, and `phases/` holds the build plan the repo
+was written from.
 
 ---
 
@@ -29,11 +31,12 @@ one node process  (pnpm dev, or pnpm build && pnpm preview)
 └── Playwright Chromium ──► launched on demand during a run, killed when the run ends
 ```
 
-Nothing is scheduled and nothing polls. The process sits idle until someone presses **Refresh**;
-that click is the only thing that ever starts a run. Kill the process and nothing keeps running.
-All state is the one SQLite file plus a cookie jar next to it.
+Nothing is scheduled and no background job ever wakes up on its own. The process sits idle until
+someone presses **Refresh**; that click is the only thing that ever starts a run. Kill the process
+and nothing keeps running. All state is the one SQLite file plus a cookie jar next to it.
 
-The whole system is roughly 2,000 lines of TypeScript across `src/`. Here is the map:
+The whole system is roughly 4,800 lines of TypeScript across `src/`, plus another 1,000 of tests.
+Here is the map:
 
 | Directory                        | Responsibility                                                        |
 | -------------------------------- | --------------------------------------------------------------------- |
@@ -171,8 +174,8 @@ A set of searches refreshed together.
 
 ### `links`
 
-One saved search URL. Capped at 10 per project — enforced in `src/server/controllers/links.ts` (`MAX_LINKS`),
-not in the schema.
+One saved search URL. Capped at 10 per project — enforced in `src/server/services/links.ts`
+(`MAX_LINKS`, which lives in `src/features/links/constants.ts`), not in the schema.
 
 | Column        | Type         | Notes                                                             |
 | ------------- | ------------ | ----------------------------------------------------------------- |
@@ -244,7 +247,9 @@ This table has two jobs at once, and both constrain what you may do to it. The s
 
 - `uniqueIndex('listings_link_external').on(linkId, externalId)` is the dedupe key. It is why the
   diff engine deduplicates additions before they reach the insert.
-- `index('listings_link_removed').on(linkId, removedAt)` serves `liveListings()`, the hot read.
+- `index('listings_link_removed').on(linkId, removedAt)` covers `linkListings()`, the hot read. That
+  query returns **every** row for the link, removed ones included — the run splits live from archived
+  in memory, because a relisted `externalId` has to find its own row instead of inserting a second.
 - After insert, only `price`, `pricePerM2`, `lastSeenAt`, `lastRank` and `removedAt` are ever
   updated. Title, description and photo stay as first captured — the row has to stay exportable
   years after the portal drops the offer.
@@ -283,10 +288,14 @@ comments and enforced at the zod boundary in `src/server/controllers/*.ts`.
 
 ### Migrations
 
-`drizzle.config.ts` points drizzle-kit at `src/server/models/schema.ts` → `drizzle/`. Two migrations exist:
+`drizzle.config.ts` points drizzle-kit at `src/server/models/schema.ts` → `drizzle/`. Four migrations
+exist:
 
 - `drizzle/0000_unknown_puma.sql` — all six tables and five indexes.
 - `drizzle/0001_brown_shadow_king.sql` — adds `listings.description` and `listings.details`.
+- `drizzle/0002_dry_white_queen.sql` — drops the scheduler's columns (`projects.runAt1`, `runAt2`,
+  `lastScheduledAt`, `runs.trigger`) when refresh became manual-only.
+- `drizzle/0003_brown_pixie.sql` — adds `projects.description`.
 
 `pnpm db:generate` diffs the schema file against `drizzle/meta/` snapshots and writes a new SQL file;
 `pnpm db:migrate` applies pending ones. Applying also happens automatically at boot, so `db:migrate`
@@ -332,8 +341,8 @@ substring:
 The `fetchMode` here is only the **seed** value written into `links.fetchMode` when a link is created.
 After that the database column is authoritative, because a link can escalate (§5d).
 
-Two other exports live here: `pageUrl(portal, url, page)` builds a page-2 URL (three portals take a
-`page` query param; nieruchomosci-online's query string is positional so the param is appended raw;
+Two other exports live here: `pageUrl(portal, url, page)` builds the URL of page N (three portals take
+a `page` query param; nieruchomosci-online's query string is positional so the param is appended raw;
 adresowo encodes the page in a path token), and `deriveLabel()` produces the default link label.
 
 ### 5b. Two ways to fetch
@@ -425,11 +434,11 @@ const politely = <T>(fn: () => Promise<T>) =>
   })
 ```
 
-Two things to take from it. First, **every outbound request** — page 1, page 2, an escalation retry of
-the same URL, each removal-confirmation detail page — waits 3–8 seconds and runs alone. Second, the
-`AsyncLocalStorage` reentrancy is what lets `run.ts` wrap an _entire run_ in `withLock()` (so two
-projects never interleave their requests) without the fetches inside that run deadlocking on the lock
-their own caller is holding.
+Two things to take from it. First, **every outbound request** — every page of the search, an
+escalation retry of the same URL, each removal-confirmation detail page — waits 3–8 seconds and runs
+alone. Second, the `AsyncLocalStorage` reentrancy is what lets `runs.ts` wrap an _entire run_ in
+`withLock()` (so two projects never interleave their requests) without the fetches inside that run
+deadlocking on the lock their own caller is holding.
 
 `fetchPage()` itself:
 
@@ -487,7 +496,7 @@ regex alone false-positives on three of the five portals. Genuine block pages ar
 CloudFront one is about 900 bytes.
 
 The browser result is deliberately **not** block-scanned. If a browser fetch comes back with a 403,
-the status check in `run.ts` catches it; there is no third tier to escalate to.
+the status check in `runs.ts` catches it; there is no third tier to escalate to.
 
 ### 5e. Confirming a removal — `verifyRemoved()`
 
@@ -595,7 +604,7 @@ markup. Those are real results of the search and are kept (15 of the 25 listings
 ### The fixtures — the only code that rots on its own
 
 `src/server/scraping/parsers/__fixtures__/` holds ten live captures, `<portal>-search.html` and
-`<portal>-empty.html` for all five portals (~7.5 MB total). `parsers.test.ts` parses them
+`<portal>-empty.html` for all five portals (~7 MB total). `parsers.test.ts` parses them
 byte-for-byte, which is why `**/__fixtures__/` is in `.prettierignore`: reformatting them would
 invalidate the tests.
 
@@ -613,7 +622,7 @@ rank is what removal detection reads:
 Three suites run over that table: the search fixture (counts, ids, portal of every URL, ≥80% priced,
 unique external ids, descriptions where the portal publishes them), the empty fixture
 (`emptyState === true`, zero listings), and a **garbage page** (`'<html><body>nope</body></html>'`)
-which must produce zero listings **and** `emptyState === false` — that is the invariant `run.ts`
+which must produce zero listings **and** `emptyState === false` — that is the invariant `runs.ts`
 depends on to tell "quiet week" from "broken parser".
 
 All `*-empty.html` are genuine zero-result captures except adresowo's: that portal answers an empty
@@ -660,10 +669,10 @@ it; the epsilon absorbs float noise from `parsePlNumber`.
 
 **`removalCandidates`** — the subtlest rule in the system.
 
-Each refresh fetches roughly the first two pages of a newest-first search, not the whole thing. Old
-listings scroll off the bottom of that window naturally, so "I did not see it this time" means
-nothing on its own. What _does_ mean something is a listing vanishing while listings _older_ than it
-are still there:
+Each refresh fetches a window off the top of a newest-first search, not the whole thing (§8 covers how
+deep). Old listings scroll off the bottom of that window naturally, so "I did not see it this time"
+means nothing on its own. What _does_ mean something is a listing vanishing while listings _older_
+than it are still there:
 
 ```ts
 // The window is newest-first and ~2 pages deep, so old listings scroll off the bottom on their
@@ -693,12 +702,12 @@ const removalCandidates = known.filter(
 If nothing survived at all, `deepestPresent` stays `-1` and **nothing** is nominated — the entire
 window turned over and there is no way to tell removal from displacement.
 
-And these are still only candidates. `run.ts` confirms each one against its own detail page (§5e)
+And these are still only candidates. `runs.ts` confirms each one against its own detail page (§5e)
 before anything is marked removed.
 
-**`needsPage2(known, page1)`** — `page1.length > 0 && !page1.some(l => knownIds.has(l.externalId))`.
-An entirely unfamiliar page 1 means more than a page of news arrived and there is probably more below
-it. The length guard stops an empty search from vacuously passing and burning a request.
+That is the whole module. Deciding _how deep to fetch_ used to live here too, as a `needsPage2()`
+predicate; it is now the paging loop in `runs.ts` (§8), because the decision needs the seen-set page
+by page and this file must stay free of state.
 
 ---
 
@@ -725,8 +734,9 @@ startRunFn (RPC)                                        ← returns in milliseco
               │        └─ broken? (0 listings AND no empty-state marker)
               │             ├─ already on browser ─► throw parse-broken
               │             └─ else: escalate to browser, persist it, retry once
-              │     liveListings(linkId)                       ← the seen-set for this link
-              │     baseline OR needsPage2? ─► load(page 2)     ← pays another 3-8s jitter
+              │     linkListings(linkId)                       ← the seen-set for this link
+              │     paging loop: while a page holds ids the seen-set has never had,
+              │        fetch the next one (cap MAX_PAGES = 10; each pays its own 3-8s jitter)
               │     dedupe (first occurrence wins) ─► rank by position ─► diff()
               │     verifyRemoved() per candidate               ← network, BEFORE the transaction
               │     ONE transaction:
@@ -765,6 +775,36 @@ export function startRun(projectId: number) {
 
 A second click while a run is in flight gets the same run id back. Nothing starts twice.
 
+### How deep the fetch goes
+
+Not a fixed page count. `runLink()` keeps paging while a page still holds ids the seen-set has never
+covered:
+
+```ts
+const seen = new Set(live.map((row) => row.externalId))
+for (let n = 2; ; n++) {
+  const fresh = page.listings.some((l) => !seen.has(l.externalId))
+  for (const l of page.listings) seen.add(l.externalId)
+  parsed.push(...page.listings)
+  if (!fresh || n > MAX_PAGES) break
+  // ...load(pageUrl(portal, link.url, n)) — best-effort, a throw just ends the loop
+}
+```
+
+A page that is entirely familiar means the window has caught up with what we already knew, so there
+is nothing below worth paying 3–8 seconds for. The reason it is not simply "always two pages" is in
+the code comment: nieruchomosci-online sorts by _modification_ date, so an agent bumping an old
+listing floats it onto page 1 — that only reads as news if the seen-set never covered the rest of the
+pool, so the loop descends until the pool is covered.
+
+`MAX_PAGES = 10` (≈400 listings) is the ceiling, and it is a tuned number, not a round one: the
+nieruchomosci-online search in use paginates 304 results over 8 pages, and its on-page counter
+undercounts, so the depth was measured with `&p=N` rather than trusted. A pool deeper than the cap
+reports bumped old listings as new forever — that is the symptom that says raise it.
+
+Extra pages are best-effort. Gratka answers a page past the last one with a hard 404, and losing page
+2 must never cost us page 1, so the loop swallows the error and stops.
+
 ### Baseline runs
 
 A link whose `baselinedAt` is `null` has never been fetched. Its first run inserts every listing it
@@ -774,9 +814,10 @@ finds and emits **zero events**:
 // A fresh link finds months of old listings; reporting them as news would bury the real news.
 ```
 
-Baselines also always fetch both pages, to seed a window worth diffing against. In the UI a baseline
-reads as `baseline: 33` rather than `0 new · 0 price · 0 removed` — `getRunStatus()` selects
-`links.baselinedAt` precisely so the two can be told apart.
+A baseline needs no special paging rule: it starts with an empty seen-set, so every page is entirely
+fresh and the loop above walks to `MAX_PAGES` on its own, seeding a window worth diffing against. In
+the UI a baseline reads as `baseline: 33` rather than `0 new · 0 price · 0 removed` — `getRunStatus()`
+selects `links.baselinedAt` precisely so the two can be told apart.
 
 ### Zero parsed is not an error
 
@@ -924,8 +965,8 @@ refreshes the query; a finished run does both.
 ### Worked example: clicking Refresh
 
 1. `startRun.mutate({ data: project.id })` → `POST /_serverFn/...startRunFn...`.
-2. Handler: `startRun(data, 'manual').runId` — the run row and checklist are already in the database
-   when the response is sent.
+2. Handler: `startRun(data).runId` — the run row and checklist are already in the database when the
+   response is sent.
 3. `onSuccess: ({ runId: id }) => setRunId(id)` arms the polling query:
 
    ```ts
@@ -1056,9 +1097,10 @@ remove it.
 2. **Zero parsed is not zero new.** A quiet run still parses ~30 listings and finds 0 changes — that
    is a normal green result. A link errors only when it parses 0 listings **and** the page carries no
    empty-state marker. → §6, §8
-3. **A listing falling off the fetch window is not a removal.** With a newest-first, ~2-page window,
-   old listings scroll off naturally. Only nominate a removal when the listing vanished while
-   listings _older_ than it are still present — then confirm via its own detail URL. → §7, §5e
+3. **A listing falling off the fetch window is not a removal.** The window is newest-first and only
+   as deep as it needs to be, so old listings scroll off naturally. Only nominate a removal when the
+   listing vanished while listings _older_ than it are still present — then confirm via its own
+   detail URL. → §7, §5e
 4. **Never delete a listing.** `listings` is the seen-set (deleting a live row makes it reappear as
    "new" next run, forever) _and_ the permanent archive — its price, description and photo must stay
    exportable years after the portal drops the offer. Nothing is pruned on a schedule. → §4, §8

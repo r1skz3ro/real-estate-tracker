@@ -133,6 +133,23 @@ test.each(CASES)(
   },
 )
 
+// Page 3 of a 86-offer search: the portal has run out of matches and starts padding, so this one
+// page carries both kinds. Without the `data-pie` filter the whole search parsed as 255 listings —
+// 169 of them offers no search ever matched.
+test('nieruchomosci-online drops padding offers but keeps the results beside them', () => {
+  const { listings, emptyState } = parseNieruchomosciOnline(
+    read('nieruchomosci-online-padded'),
+    'https://www.nieruchomosci-online.pl/szukaj.html?3,dzialka,sprzedaz,,Sulistrowice:41347,,,10,,-3500&p=3',
+  )
+
+  expect(listings).toHaveLength(4)
+  expect(emptyState).toBe(false)
+  // The first supplement tile on the page; anything that keeps it back is counting padding again.
+  expect(listings.map((listing) => listing.externalId)).not.toContain(
+    '25981526',
+  )
+})
+
 test.each(CASES)(
   '$portal treats an unparseable page as an error, not as empty',
   ({ parser, pageUrl }) => {

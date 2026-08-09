@@ -19,8 +19,10 @@ Fetching, diffing, persistence.
   `listings.length === 0`. Deriving it would make a broken parser look like a quiet week, and a
   quiet week is normal: a link only counts as failed when it parses 0 listings **and** the page
   carries no empty-state marker.
-- Every portal pads its results with non-matching offers (recommendations, wider radius). Filtering
-  those out is the parser's job.
+- Every portal pads its results with non-matching offers (recommendations, wider radius, expired
+  listings). Filtering those out is the parser's job. Padding keeps coming while real results run
+  out, so a portal serves far more of it than results — nieruchomosci-online answers an 86-offer
+  search with 255 offers — and unfiltered padding reads as an endless supply of "new" listings.
 - **Do not touch `__fixtures__/`.** The tests match them byte-for-byte, and they are
   prettier-ignored for that reason. This suite is the only code in the project that rots silently
   when a portal changes its HTML — when it breaks, re-capture the page, don't loosen the test.
