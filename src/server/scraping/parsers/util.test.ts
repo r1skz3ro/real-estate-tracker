@@ -1,5 +1,10 @@
 import { expect, test } from 'vitest'
-import { absoluteUrl, derivePricePerM2, parsePlNumber } from './util'
+import {
+  absoluteUrl,
+  derivePricePerM2,
+  parsePlNumber,
+  parsePostedAt,
+} from './util'
 
 test.each([
   ['389 000', 389000],
@@ -27,6 +32,45 @@ test.each([
   [300000, -5],
 ])('derivePricePerM2(%j, %j) -> null', (price, areaM2) => {
   expect(derivePricePerM2(price, areaM2)).toBeNull()
+})
+
+// Asserted through local getters, the same way the Date was built — the portals print wall-clock
+// dates, and pinning a UTC instant here would just encode the test machine's offset.
+const ymd = (d: Date | null) =>
+  d && [d.getFullYear(), d.getMonth() + 1, d.getDate()].join('-')
+
+test.each([
+  // nieruchomosci-online's modDate and OLX's plain card date.
+  ['5 sierpnia 2026', '2026-8-5'],
+  ['03 sierpnia 2026', '2026-8-3'],
+  ['10 października 2025', '2025-10-10'],
+  // OLX prefixes a bumped offer; the date is the same date.
+  ['Odświeżono dnia 01 sierpnia 2026', '2026-8-1'],
+  // otodom's __NEXT_DATA__ shape.
+  ['2021-07-27 17:31:30', '2021-7-27'],
+])('parsePostedAt(%j) -> %s', (input, expected) => {
+  expect(ymd(parsePostedAt(input))).toBe(expected)
+})
+
+test('parsePostedAt reads OLX relative wording against the current day', () => {
+  const now = new Date(2026, 7, 9, 18, 0, 0)
+  expect(ymd(parsePostedAt('Dzisiaj o 12:34', now))).toBe('2026-8-9')
+  expect(parsePostedAt('Dzisiaj o 12:34', now)?.getHours()).toBe(12)
+  expect(ymd(parsePostedAt('Wczoraj o 09:05', now))).toBe('2026-8-8')
+})
+
+test.each([
+  // The two placeholders the portals ship where they have no date. Both must read as "no date":
+  // 29 February 1999 does not exist, and JS would silently roll it to 1 March.
+  ['1999-02-29 00:00:01'],
+  ['-0001-11-30'],
+  ['Sulistrowice'],
+  ['32 marnego 2026'],
+  [''],
+  [null],
+  [undefined],
+])('parsePostedAt(%j) -> null', (input) => {
+  expect(parsePostedAt(input)).toBeNull()
 })
 
 test('absoluteUrl resolves relative hrefs against the page url', () => {

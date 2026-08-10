@@ -31,8 +31,12 @@ CloudFront 403s every plain-HTTP variant that was tried (realistic Chrome header
 ## Using it
 
 1. Create a **project** (a set of searches refreshed together).
-2. Paste search URLs into it — up to 10 per project. The portal is detected from the hostname.
-3. Hit **Refresh**. That is the only thing that ever fetches — nothing runs in the background.
+2. Paste search URLs into it — up to 10 per project. The portal is detected from the hostname, and
+   adding one immediately fetches it once, so you find out straight away whether it works.
+3. Hit **Refresh** to check them all again. Nothing runs in the background — a fetch only ever
+   happens because you added a link or pressed Refresh.
+4. Click any link to open its own page: its listings, its full fetch history with the network log
+   of every request, and its settings.
 
 ### Every search URL must already be sorted newest-first
 
@@ -49,7 +53,17 @@ and the app will report churn that did not happen. Set the sort on the portal be
 
 The first run of a link is a **baseline** — it records everything currently on the search without
 reporting any of it as news, because a fresh link finds months of old listings and reporting them
-would bury the real news. Changes start with the second run.
+would bury the real news. Changes start with the second run. The link's own page shows the ten
+newest of what the baseline recorded, labelled as such, so a first fetch does not look like a
+failure.
+
+Editing a link's URL starts it over the same way: the listings tracked under the old search are
+archived — kept and still readable, just no longer watched — and the next fetch takes a fresh
+baseline rather than reporting a whole new search as news.
+
+Each listing carries two dates. **Added** is when this app first saw it, and always exists.
+**Posted** is the date the portal itself prints on the card — otodom, OLX and
+nieruchomosci-online publish one, gratka and adresowo do not, so it shows `—` for those.
 
 ### What the link statuses mean
 

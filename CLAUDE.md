@@ -115,14 +115,23 @@ each one fixes a bug that was actually observed.
 - `reasonFor()` in `services/runs.ts` writes `<category>: <detail>` into `links.lastError`; the UI
   parses that prefix back in `linkError()` (`src/lib/format.ts`) to pick amber vs red. Add a
   category on one side and add it to the other.
-- Refresh is **manual only** — there is no scheduler, no background process, no cron. A run starts
-  when the user clicks Refresh (`startRunFn`) and never any other way; don't add a timer.
+- Refresh is **user-triggered only** — there is no scheduler, no background process, no cron. A run
+  starts on exactly two user actions: clicking Refresh, and adding a link (which fires a one-link
+  baseline, because the fetch is also how a new URL gets validated). Both go through `startRunFn` /
+  `startRun(projectId, linkId?)`. Don't add a timer, and don't add a third trigger.
 - DB requires `foreign_keys = ON` set explicitly (SQLite defaults it off, so cascading deletes
   silently no-op without it). Plain exported query functions in `src/server/models/queries.ts`, no
   repository classes.
 - Two data planes on purpose: router loaders own projects and links (a write ends in
   `router.invalidate()`), React Query owns run polling and the findings timeline (a write ends in
   `queryClient.invalidateQueries()`). Several actions touch both and must invalidate both.
+- A run's per-link record is `runLinks` — counters, status, and the fetch log. It is the link page's
+  history _and_ its live progress: `useLinkRun` polls it instead of a run id, so it can follow a run
+  it did not start (an add-triggered baseline, or a project-wide refresh) and survive a reload.
+- `listings.postedAt` is the portal's own date and means something different on each portal — three
+  publish one, two don't. `firstSeenAt` is the timestamp that always exists. See `docs/portals.md`.
+- Changing a link's URL archives its listings and clears `baselinedAt` rather than editing in place;
+  the baseline branch of `runLink()` therefore has to upsert, never blind-insert.
 
 ## Conventions
 

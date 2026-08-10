@@ -1,23 +1,33 @@
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { Run } from './useRun'
 
+// Takes the three things it actually needs rather than a whole run, so the project page's `useRun`
+// and the link page's `useLinkRun` — which follow a run in different ways — share one button.
 export function RefreshButton({
-  run,
+  running,
+  starting,
+  start,
   disabled,
+  label = 'Refresh',
+  size,
 }: {
-  run: Run
+  running: boolean
+  starting: boolean
+  start: () => void
   disabled?: boolean
+  label?: string
+  size?: 'sm'
 }) {
   return (
     <Button
       variant="secondary"
-      disabled={run.running || run.starting || disabled}
-      onClick={run.start}
+      size={size}
+      disabled={running || starting || disabled}
+      onClick={start}
     >
-      <RefreshCw className={cn(run.running && 'animate-spin')} />
-      {run.running ? 'Refreshing…' : 'Refresh'}
+      <RefreshCw className={cn(running && 'animate-spin')} />
+      {running ? 'Refreshing…' : label}
     </Button>
   )
 }

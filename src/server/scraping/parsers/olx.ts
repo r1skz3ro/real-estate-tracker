@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { parsePlNumber } from './util'
+import { parsePlNumber, parsePostedAt } from './util'
 import type { Parser } from './util'
 
 // Anchored at the end of the path, not just "somewhere after -ID": a slug is free to contain that
@@ -37,11 +37,16 @@ export const parseOlx: Parser = (html, pageUrl) => {
       const priceText = card.find('[data-testid="ad-price"]').first().text()
       const price = parsePlNumber(priceText.match(PRICE_RE)?.[1] ?? '')
 
-      const locationDate = card
+      // "Sulistrowice - 03 sierpnia 2026", or "- Odświeżono dnia 01 sierpnia 2026" on a bumped
+      // offer. The date is the last segment, not the second: a location is free to contain " - ".
+      const parts = card
         .find('[data-testid="location-date"]')
         .first()
         .text()
-      const location = locationDate.split(' - ')[0]?.trim() || null
+        .split(' - ')
+      const location = parts[0]?.trim() || null
+      const postedAt =
+        parts.length > 1 ? parsePostedAt(parts[parts.length - 1]) : null
 
       const image = card
         .find('img[src]')
@@ -59,6 +64,7 @@ export const parseOlx: Parser = (html, pageUrl) => {
         pricePerM2: null,
         location,
         imageUrl: image ?? null,
+        postedAt,
       }
     })
     .toArray()

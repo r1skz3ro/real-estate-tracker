@@ -24,29 +24,38 @@ export function withLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // Every request pays the jitter, including page 1 → page 2 and an escalation retry of the same URL.
+// The wait is timed apart from the request because the link page shows both: folded together, every
+// request would read as a 4–9 second portal, and a portal actually slowing down would be invisible.
 const politely = <T>(fn: () => Promise<T>) =>
   withLock(async () => {
-    await sleep(3000 + Math.random() * 5000)
-    return fn()
+    const waitedMs = Math.round(3000 + Math.random() * 5000)
+    await sleep(waitedMs)
+    const started = Date.now()
+    const value = await fn()
+    return { value, waitedMs, ms: Date.now() - started }
   })
 
 export async function fetchPage(link: Link, url: string) {
   const portal = detectPortal(url)
   const ready = portal ? PORTALS[portal].ready : undefined
-  const viaBrowser = async () => ({
-    ...(await politely(() => browserFetch(url, ready))),
-    usedBrowser: true,
-  })
+  const viaBrowser = async () => {
+    const { value, waitedMs, ms } = await politely(() =>
+      browserFetch(url, ready),
+    )
+    return { ...value, usedBrowser: true, waitedMs, ms }
+  }
 
   if (link.fetchMode === 'browser') return viaBrowser()
 
-  const res = await politely(() => httpFetch(url))
+  const { value: res, waitedMs, ms } = await politely(() => httpFetch(url))
   if (!res.blocked)
     return {
       html: res.html,
       status: res.status,
       url: res.url,
       usedBrowser: false,
+      waitedMs,
+      ms,
     }
 
   const escalated = await viaBrowser()

@@ -17,11 +17,23 @@ export type LinkState = {
   tone: 'red' | 'amber' | null
 }
 
+// Only the fields these two functions actually read. The project page passes a row from the run
+// poll and the link page one from the link's own history — same columns, different joins.
+export type RunLinkView = Pick<
+  RunLink,
+  | 'status'
+  | 'error'
+  | 'parsedCount'
+  | 'newCount'
+  | 'priceCount'
+  | 'removedCount'
+> & { baselinedAt?: Date | null }
+
 // What the row says and how loud it says it. The raw reason stays as the tooltip — the friendly
 // wording is for reading, the category detail is for debugging.
 export function linkState(
   link: Link,
-  runLink: RunLink | undefined,
+  runLink: RunLinkView | undefined,
   startedAt: RunStatus['run']['startedAt'] | undefined,
 ): LinkState {
   const status = runLink?.status ?? link.status
@@ -48,7 +60,7 @@ export function linkState(
 }
 
 export function runSummary(
-  runLink: RunLink,
+  runLink: RunLinkView,
   startedAt: RunStatus['run']['startedAt'],
 ): string {
   if (runLink.status === 'pending') return 'waiting'

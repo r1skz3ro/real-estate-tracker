@@ -24,3 +24,7 @@ feature's UI hostage; move it into `src/features/<feature>/`.
   only says which. It is also where deleting a project lands.
 - Loaders run in parallel or not at all — use `Promise.all`, two sequential `await`s are a request
   waterfall.
+- `projects.$projectId_.links.$linkId.tsx` uses the trailing-underscore escape on purpose. The path
+  still reads `/projects/1/links/2`, but the `_` opts it out of nesting under
+  `projects.$projectId.tsx` — so the project page stays a leaf and needs no `<Outlet/>`. Drop the
+  underscore and the link page renders _inside_ the project page.

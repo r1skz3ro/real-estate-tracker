@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import { findLdJson, parsePlNumber } from './util'
+import { findLdJson, parsePlNumber, parsePostedAt } from './util'
 import type { Parser } from './util'
 
 type NolOffer = {
@@ -49,19 +49,38 @@ function tileClasses(html: string): Map<string, string> {
   return classes
 }
 
+// The ld+json carries no date; the tile blob does, as `modDate`. That blob is JSON escaped inside a
+// script string rather than parseable markup, so the pairing is textual: each tile prints modDate
+// ~450 chars before its own shareUrl, and the fixture holds exactly one shareUrl per modDate.
+// The cap keeps a tile that ever omits shareUrl from stealing the next tile's date.
+const MOD_DATE_RE =
+  /"modDate":"([^"]+)"[\s\S]{0,800}?"shareUrl":"[^"]*?(\d+)\.html"/g
+
+// It is a *modification* date — this portal sorts by it, so an agent bumping an old offer moves it.
+function tileDates(html: string): Map<string, Date> {
+  const dates = new Map<string, Date>()
+  for (const [, raw, id] of html.matchAll(MOD_DATE_RE)) {
+    const date = parsePostedAt(raw)
+    if (id && date) dates.set(id, date)
+  }
+  return dates
+}
+
 export const parseNieruchomosciOnline: Parser = (html) => {
   const collectionPage = findLdJson<NolCollectionPage>(html, 'CollectionPage')
   const offers = collectionPage?.mainEntity?.offers?.[0]?.offers ?? []
   const classes = tileClasses(html)
+  const dates = tileDates(html)
 
   const listings = offers
     .map((offer) => {
       const areaM2 = offer.itemOffered?.floorSize?.value
         ? parsePlNumber(offer.itemOffered.floorSize.value)
         : null
+      const externalId = offer.url.match(EXTERNAL_ID_RE)?.[1] ?? offer.url
 
       return {
-        externalId: offer.url.match(EXTERNAL_ID_RE)?.[1] ?? offer.url,
+        externalId,
         url: offer.url,
         title: offer.name,
         price: parsePlNumber(offer.price),
@@ -73,6 +92,7 @@ export const parseNieruchomosciOnline: Parser = (html) => {
         location: offer.itemOffered?.address?.addressLocality ?? null,
         imageUrl: offer.image ?? null,
         description: offer.itemOffered?.description ?? null,
+        postedAt: dates.get(externalId) ?? null,
         details: { addressRegion: offer.itemOffered?.address?.addressRegion },
       }
     })

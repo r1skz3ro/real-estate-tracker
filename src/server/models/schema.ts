@@ -13,6 +13,10 @@ import {
 // outside the bundler, so it must import nothing but drizzle.
 export type ListingDetails = Record<string, unknown>
 
+// One line of what a link's fetch actually did — a request and its status, an escalation, a diff
+// result. Declared here for the same reason as ListingDetails: it is the type of a column.
+export type LogLine = { at: number; msg: string }
+
 const createdAt = () =>
   integer('createdAt', { mode: 'timestamp_ms' })
     .notNull()
@@ -77,10 +81,17 @@ export const runLinks = sqliteTable(
       .notNull()
       .default(false),
     error: text('error'),
+    // What the fetch did, appended as it happens. Scoped to this one row on purpose: nothing ever
+    // queries log lines across runs, so they are this row's payload rather than a table.
+    log: text('log', { mode: 'json' }).$type<Array<LogLine>>(),
     startedAt: integer('startedAt', { mode: 'timestamp_ms' }),
     finishedAt: integer('finishedAt', { mode: 'timestamp_ms' }),
   },
-  (t) => [index('runLinks_run').on(t.runId)],
+  (t) => [
+    index('runLinks_run').on(t.runId),
+    // The link page's history reads by link, newest first; runLinks_run cannot serve that.
+    index('runLinks_link').on(t.linkId, t.id),
+  ],
 )
 
 // The seen-set. Never delete a row with removedAt IS NULL — it would reappear as "new" forever.
@@ -105,6 +116,10 @@ export const listings = sqliteTable(
     // portal offer here, so this is the archive copy of what the search page said.
     description: text('description'),
     details: text('details', { mode: 'json' }).$type<ListingDetails>(),
+    // The date the portal itself prints on the card. What that means differs per portal (created,
+    // refreshed, last modified — see docs/portals.md), and two of the five publish none at all, so
+    // it is nullable and firstSeenAt stays the timestamp we can always show.
+    postedAt: integer('postedAt', { mode: 'timestamp_ms' }),
     firstSeenAt: integer('firstSeenAt', { mode: 'timestamp_ms' }).notNull(),
     lastSeenAt: integer('lastSeenAt', { mode: 'timestamp_ms' }).notNull(),
     // position in last fetch; used by removal detection

@@ -1,10 +1,10 @@
-import { X } from 'lucide-react'
+import { Link as RouterLink } from '@tanstack/react-router'
+import { ChevronRight, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { linkState } from './linkState'
-import { useDeleteLink, useRenameLink } from './useLinks'
+import { useDeleteLink } from './useLinks'
 import type { Link } from './types'
 import type { RunLink, RunStatus } from '@/features/runs/types'
 
@@ -17,7 +17,6 @@ export function LinkRow({
   runLink: RunLink | undefined
   startedAt: RunStatus['run']['startedAt'] | undefined
 }) {
-  const rename = useRenameLink()
   const remove = useDeleteLink()
   const { status, dot, text, title, tone } = linkState(link, runLink, startedAt)
 
@@ -27,18 +26,19 @@ export function LinkRow({
         title={status}
         className={cn('size-2 shrink-0 rounded-full', dot)}
       />
-      <Input
-        defaultValue={link.label}
-        aria-label="Link label"
-        maxLength={80}
-        onBlur={(e) => {
-          const label = e.target.value.trim()
-          if (label && label !== link.label)
-            rename.mutate({ data: { id: link.id, label } })
-          else e.target.value = link.label
+      {/* The row is the way into the link's own page — its config, listings and logs live there,
+          which is also why the label is no longer editable in place. */}
+      <RouterLink
+        to="/projects/$projectId/links/$linkId"
+        params={{
+          projectId: String(link.projectId),
+          linkId: String(link.id),
         }}
-        className="h-7 min-w-0 flex-1 border-transparent bg-transparent px-1.5 text-sm hover:border-input md:text-sm dark:bg-transparent"
-      />
+        className="flex min-w-0 flex-1 items-center gap-1 truncate text-sm hover:underline"
+      >
+        <span className="truncate">{link.label}</span>
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+      </RouterLink>
       {text && (
         <span
           title={title ?? undefined}

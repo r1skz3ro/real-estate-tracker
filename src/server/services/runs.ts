@@ -1,5 +1,6 @@
 import {
   activeRun,
+  appendRunLinkLog,
   createRun,
   finishRun,
   insertEvent,
@@ -54,7 +55,12 @@ const PARSE_BROKEN = 'parse-broken: 0 listings and no empty-state marker'
 // this, whose symptom is bumped old listings reported as new forever.
 const MAX_PAGES = 10
 
-async function runLink(runId: number, link: Link) {
+const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`
+const dur = (ms: number) => (ms >= 1000 ? secs(ms) : `${ms}ms`)
+
+type Log = (msg: string) => void
+
+async function runLink(runId: number, link: Link, log: Log) {
   const portal = detectPortal(link.url)
   if (!portal) throw new LinkError('unknown: unsupported portal')
 
@@ -63,10 +69,19 @@ async function runLink(runId: number, link: Link) {
 
   const load = async (url: string): Promise<ParseResult> => {
     const res = await fetchPage({ id: link.id, fetchMode }, url)
+    // The wait is reported apart from the request: every request pays 3–8s of politeness, and
+    // folding it in would hide a portal that actually got slow.
+    log(
+      `GET ${url} → ${res.status} · waited ${secs(res.waitedMs)} · ${dur(res.ms)} · ` +
+        `${res.usedBrowser ? 'browser' : 'http'} · ${Math.round(res.html.length / 1024)} KB`,
+    )
     // fetchPage escalates on a detected block and persists it — keep our copy in step.
     if (res.usedBrowser && fetchMode !== 'browser') {
       fetchMode = 'browser'
       escalated = true
+      log(
+        'plain request was blocked — this link now fetches through the browser',
+      )
     }
     if ([403, 429, 503].includes(res.status))
       throw new LinkError(`blocked: HTTP ${res.status}`)
@@ -75,8 +90,16 @@ async function runLink(runId: number, link: Link) {
     if (res.status === 404 || res.status === 410)
       throw new LinkError(`not-found: HTTP ${res.status}`)
     if (res.status >= 400) throw new LinkError(`network: HTTP ${res.status}`)
-    return PARSERS[portal](res.html, res.url)
+
+    const parsed = PARSERS[portal](res.html, res.url)
+    log(
+      `parsed ${parsed.listings.length} listings` +
+        (parsed.emptyState ? ' · portal reported no results' : ''),
+    )
+    return parsed
   }
+
+  log(`${portal} · fetching over ${fetchMode}`)
 
   let page1 = await load(link.url)
   if (broken(page1)) {
@@ -84,12 +107,17 @@ async function runLink(runId: number, link: Link) {
     fetchMode = 'browser'
     escalated = true
     updateLink(link.id, { fetchMode })
+    log('0 listings and no empty-state marker — retrying through the browser')
     page1 = await load(link.url)
     if (broken(page1)) throw new LinkError(PARSE_BROKEN)
   }
 
   const all = linkListings(link.id)
   const live = all.filter((row) => row.removedAt === null)
+  // Every row this link has ever recorded. A listing we are about to add may already own one — a
+  // relist, or a re-baseline after the URL changed — and inserting a second would break
+  // listings_link_external and roll the whole transaction back.
+  const existing = new Map(all.map((row) => [row.externalId, row]))
   const isBaseline = link.baselinedAt === null
 
   // Keep paging while a page still holds ids we have never seen. nieruchomosci-online sorts by
@@ -103,7 +131,11 @@ async function runLink(runId: number, link: Link) {
     const fresh = page.listings.some((l) => !seen.has(l.externalId))
     for (const l of page.listings) seen.add(l.externalId)
     parsed.push(...page.listings)
-    if (!fresh || n > MAX_PAGES) break
+    if (!fresh) {
+      log(`page ${n - 1} held nothing unseen — stopping here`)
+      break
+    }
+    if (n > MAX_PAGES) break
     const url = pageUrl(portal, link.url, n)
     if (!url) break
     // Extra pages are best-effort: gratka answers a page past the last one with a hard 404, and
@@ -111,6 +143,7 @@ async function runLink(runId: number, link: Link) {
     try {
       page = await load(url)
     } catch {
+      log(`page ${n} could not be fetched — keeping what pages 1–${n - 1} gave`)
       break
     }
   }
@@ -128,42 +161,57 @@ async function runLink(runId: number, link: Link) {
   // A fresh link finds months of old listings; reporting them as news would bury the real news.
   if (isBaseline) {
     tx(() => {
-      for (const [rank, listing] of fetched.entries())
-        insertListing({
-          ...listing,
-          linkId: link.id,
-          firstSeenAt: now,
-          lastSeenAt: now,
-          lastRank: rank,
-        })
+      for (const [rank, listing] of fetched.entries()) {
+        const previous = existing.get(listing.externalId)
+        if (previous)
+          updateListing(previous.id, {
+            ...listing,
+            removedAt: null,
+            lastSeenAt: now,
+            lastRank: rank,
+          })
+        else
+          insertListing({
+            ...listing,
+            linkId: link.id,
+            firstSeenAt: now,
+            lastSeenAt: now,
+            lastRank: rank,
+          })
+      }
       updateLink(link.id, { baselinedAt: now })
     })
+    log(
+      `baseline: recorded ${fetched.length} listings — a first fetch reports no changes`,
+    )
     return { parsedCount: fetched.length, escalated }
   }
 
+  // Live only, on purpose: a row already marked removed must not be nominated for removal again.
   const known = new Map(live.map((row) => [row.externalId, row]))
-  // Kept out of `known` on purpose: a removed row must not be nominated for removal all over again.
-  const archived = new Map(
-    all
-      .filter((row) => row.removedAt !== null)
-      .map((row) => [row.externalId, row]),
-  )
   const changes = diff(live, fetched)
+  log(
+    `diff over ${fetched.length} fetched vs ${live.length} tracked: ${changes.added.length} new · ` +
+      `${changes.priced.length} price · ${changes.removalCandidates.length} possibly gone`,
+  )
 
   // Confirmed before the write transaction — each one is a network round trip.
   const removed: Array<Listing> = []
   for (const candidate of changes.removalCandidates) {
     const row = known.get(candidate.externalId)
-    if (row && (await verifyRemoved({ id: link.id, fetchMode }, row.url)))
-      removed.push(row)
+    if (!row) continue
+    const gone = await verifyRemoved({ id: link.id, fetchMode }, row.url)
+    log(
+      `checked ${row.url} — ${gone ? 'gone, marking removed' : 'still live, keeping'}`,
+    )
+    if (gone) removed.push(row)
   }
 
   tx(() => {
     for (const listing of changes.added) {
       const lastRank = rankOf.get(listing.externalId) ?? 0
-      // A relist keeps its row — re-inserting it would violate listings_link_external and roll the
-      // whole transaction back. firstSeenAt stays put: the row is the permanent archive.
-      const previous = archived.get(listing.externalId)
+      // A relist keeps its row. firstSeenAt stays put: the row is the permanent archive.
+      const previous = existing.get(listing.externalId)
       if (previous)
         updateListing(previous.id, {
           ...listing,
@@ -227,13 +275,17 @@ async function runLink(runId: number, link: Link) {
     }
   })
 
-  return {
+  const result = {
     parsedCount: fetched.length,
     newCount: changes.added.length,
     priceCount: changes.priced.length,
     removedCount: removed.length,
     escalated,
   }
+  log(
+    `done: ${result.newCount} new · ${result.priceCount} price · ${result.removedCount} removed`,
+  )
+  return result
 }
 
 async function execute(
@@ -247,10 +299,14 @@ async function execute(
       updateRunLink(runId, link.id, {
         status: 'running',
         startedAt: new Date(),
+        // A refresh replaces the previous attempt's log rather than appending to it — the link page
+        // shows one run at a time, and its history keeps the older ones.
+        log: [],
       })
+      const log = (msg: string) => appendRunLinkLog(runId, link.id, msg)
       // Each link is contained: one dead portal must never abort the run.
       try {
-        const result = await runLink(runId, link)
+        const result = await runLink(runId, link, log)
         updateRunLink(runId, link.id, {
           status: 'ok',
           ...result,
@@ -264,6 +320,7 @@ async function execute(
         ok++
       } catch (err) {
         const error = reasonFor(err)
+        log(`error: ${error}`)
         updateRunLink(runId, link.id, {
           status: 'error',
           error,
@@ -298,11 +355,19 @@ async function notify(summary: {
 
 // Synchronous setup (better-sqlite3 is sync), so the caller gets a runId to poll immediately while
 // the work runs behind the global fetch mutex.
-export function startRun(projectId: number) {
+//
+// `linkId` narrows the run to one link — the link page's own refresh, and the baseline a new link
+// fires on itself. It is still a project run with a one-link checklist, so the timeline, the unread
+// counts and the dedupe below all keep working unchanged.
+// ponytail: dedupe stays project-wide. The fetch mutex is process-global, so a second run would
+// queue rather than overlap anyway; the UI disables refresh while one is in flight.
+export function startRun(projectId: number, linkId?: number) {
   const existing = activeRun(projectId)
   if (existing) return { runId: existing.id, finished: Promise.resolve() }
 
-  const projectLinks = listLinks(projectId)
+  const all = listLinks(projectId)
+  const projectLinks =
+    linkId === undefined ? all : all.filter((l) => l.id === linkId)
   const runId = createRun(
     projectId,
     projectLinks.map((l) => l.id),

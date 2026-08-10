@@ -20,6 +20,35 @@ HTML the parser tests match byte-for-byte).
 Browser `ready` selectors (what the Playwright path waits for before reading the DOM) are in
 `PORTALS` in `src/server/scraping/portals.ts`.
 
+## Listing dates (`listings.postedAt`)
+
+The date the portal prints on the card. **The five do not agree on what that date means**, and two
+publish none at all — so `postedAt` is nullable, the UI shows `—` where it is missing, and
+`firstSeenAt` (when this tracker first saw the offer) is the timestamp that always exists.
+
+| Portal                  | Source                                                                    | Actually means    |
+| ----------------------- | ------------------------------------------------------------------------- | ----------------- |
+| otodom.pl               | `dateCreated` in `__NEXT_DATA__` (also kept in `details`)                 | created           |
+| olx.pl                  | tail of `[data-testid="location-date"]`, after the last `-`               | posted, or bumped |
+| nieruchomosci-online.pl | `"modDate"` in the tile blob, paired to the id via that tile's `shareUrl` | last modified     |
+| gratka.pl               | none found on the search page                                             | —                 |
+| adresowo.pl             | none found on the search page                                             | —                 |
+
+All three go through `parsePostedAt()` in `parsers/util.ts`, which reads otodom's
+`YYYY-MM-DD HH:MM:SS`, Polish long dates (`5 sierpnia 2026`), the `Odświeżono dnia` prefix OLX puts
+on a bumped offer, and `Dzisiaj`/`Wczoraj o HH:MM`.
+
+Two placeholders must keep returning `null`, and both are in the fixtures: otodom writes
+`1999-02-29` — a day that does not exist, which JS silently rolls forward to 1 March — and
+nieruchomosci-online writes `-0001-11-30`. Anything before the year 2000 is rejected for that
+reason, against the _source string_, not the parsed `Date`.
+
+nieruchomosci-online is the fragile one: its dates live in JSON escaped inside a script string, not
+in parseable markup, so the pairing is textual (`modDate` … ≤800 chars … `shareUrl`). The fixture
+holds exactly one `shareUrl` per `modDate`, 438–547 chars apart. Coverage against the current
+fixtures is otodom 18/19 (the miss is the placeholder), nieruchomosci-online 40/40, olx 25/25 — the
+parser test pins ≥80%, so a renamed key fails loudly instead of writing nulls forever.
+
 ## Expired-listing markers
 
 Used by `verifyRemoved()` to confirm a removal candidate against its own detail page. Deliberately

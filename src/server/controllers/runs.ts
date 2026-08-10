@@ -4,10 +4,18 @@ import { getRunStatus } from '@/server/models/queries'
 import { startRun } from '@/server/services/runs'
 
 // Returns immediately with the run id; the work continues in the background. A second click while
-// a run is in flight gets that run's id back rather than starting another.
+// a run is in flight gets that run's id back rather than starting another. `linkId` narrows the run
+// to one link — the link page's own refresh.
 export const startRunFn = createServerFn({ method: 'POST' })
-  .validator(z.number().int())
-  .handler(({ data }) => ({ runId: startRun(data).runId }))
+  .validator(
+    z.object({
+      projectId: z.number().int(),
+      linkId: z.number().int().optional(),
+    }),
+  )
+  .handler(({ data: { projectId, linkId } }) => ({
+    runId: startRun(projectId, linkId).runId,
+  }))
 
 export const getRunStatusFn = createServerFn({ method: 'GET' })
   .validator(z.number().int())

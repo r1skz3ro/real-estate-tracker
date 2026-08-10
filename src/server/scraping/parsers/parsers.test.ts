@@ -25,9 +25,12 @@ const CASES: Array<{
   alsoAllows?: Portal
   // Only these two publish a description on the search page at all.
   expectsDescription?: boolean
+  // Only these three print a date on the card; gratka and adresowo publish none.
+  expectsPostedAt?: boolean
 }> = [
   {
     portal: 'otodom',
+    expectsPostedAt: true,
     parser: parseOtodom,
     pageUrl:
       'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski/sobotka/sulistrowice',
@@ -37,6 +40,7 @@ const CASES: Array<{
   },
   {
     portal: 'nieruchomosci-online',
+    expectsPostedAt: true,
     parser: parseNieruchomosciOnline,
     pageUrl: 'https://wroclaw.nieruchomosci-online.pl/szukaj.html',
     expectedCount: 40,
@@ -59,6 +63,7 @@ const CASES: Array<{
   },
   {
     portal: 'olx',
+    expectsPostedAt: true,
     parser: parseOlx,
     pageUrl:
       'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
@@ -81,6 +86,7 @@ test.each(CASES)(
     firstId,
     alsoAllows,
     expectsDescription,
+    expectsPostedAt,
   }) => {
     const { listings, emptyState } = parser(read(`${portal}-search`), pageUrl)
 
@@ -119,6 +125,20 @@ test.each(CASES)(
       ).length
       expect(withDescription / listings.length).toBeGreaterThanOrEqual(0.8)
       expect(listings[0]?.details).toBeTruthy()
+    }
+
+    // A renamed key silently writes null forever, and a dash in the UI is indistinguishable from a
+    // portal that never published a date — so pin both sides.
+    const withPostedAt = listings.filter(
+      (listing) => listing.postedAt instanceof Date,
+    ).length
+    if (expectsPostedAt) {
+      expect(withPostedAt / listings.length).toBeGreaterThanOrEqual(0.8)
+      // A plausible date, not 1970 or a placeholder decades out.
+      const first = listings.find((listing) => listing.postedAt)!.postedAt!
+      expect(first.getFullYear()).toBeGreaterThanOrEqual(2015)
+    } else {
+      expect(withPostedAt).toBe(0)
     }
   },
 )

@@ -1,4 +1,4 @@
-import { absoluteUrl } from './util'
+import { absoluteUrl, parsePostedAt } from './util'
 import type { Parser } from './util'
 
 type OtodomAddressPart = { name: string } | null
@@ -68,6 +68,7 @@ export const parseOtodom: Parser = (html, pageUrl) => {
       // Otodom truncates it to ~200 chars on the search page; the full text lives on the detail page
       // and is not worth a request per listing.
       description: item.shortDescription ?? null,
+      postedAt: parsePostedAt(item.dateCreated),
       details: {
         estate: item.estate,
         transaction: item.transaction,

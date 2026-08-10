@@ -27,6 +27,8 @@ const state = {
   runLinks: new Map<number, Row>(),
   runStatus: '',
   events: [] as Array<Row>,
+  listings: [] as Array<Row>,
+  logs: new Map<number, Array<string>>(),
 }
 
 vi.mock('@/server/models/queries', () => ({
@@ -40,10 +42,23 @@ vi.mock('@/server/models/queries', () => ({
     state.runLinks.set(linkId, { ...state.runLinks.get(linkId), ...data }),
   updateLink: (id: number, data: Row) =>
     Object.assign(state.links.find((l) => l.id === id) ?? {}, data),
-  linkListings: () => [],
-  insertListing: (data: Row) => ({ ...data, id: 1 }),
-  updateListing: () => {},
+  linkListings: () => state.listings,
+  insertListing: (data: Row) => {
+    // The real column is UNIQUE (linkId, externalId); a blind insert over an existing row is the
+    // failure this mock has to be able to reproduce.
+    if (state.listings.some((l) => l.externalId === data.externalId))
+      throw new Error(
+        'UNIQUE constraint failed: listings.linkId, listings.externalId',
+      )
+    const row = { ...data, id: state.listings.length + 1 }
+    state.listings.push(row)
+    return row
+  },
+  updateListing: (id: number, data: Row) =>
+    Object.assign(state.listings.find((l) => l.id === id) ?? {}, data),
   insertEvent: (data: Row) => state.events.push(data),
+  appendRunLinkLog: (_runId: number, linkId: number, msg: string) =>
+    state.logs.set(linkId, [...(state.logs.get(linkId) ?? []), msg]),
   tx: (fn: () => unknown) => fn(),
 }))
 
@@ -66,6 +81,8 @@ const page = (result: Partial<ParseResult>) => ({
   status: 200,
   url: 'https://www.otodom.pl/',
   usedBrowser: false,
+  waitedMs: 4000,
+  ms: 120,
 })
 
 const listing = (externalId: string): ParsedListing => ({
@@ -85,6 +102,8 @@ beforeEach(() => {
   state.runLinks.clear()
   state.runStatus = ''
   state.events = []
+  state.listings = []
+  state.logs.clear()
   fetchPage.mockReset()
 })
 
@@ -168,4 +187,72 @@ test('zero parsed with an empty-state marker is a normal quiet result', async ()
 
   expect(state.runLinks.get(1)).toMatchObject({ status: 'ok', parsedCount: 0 })
   expect(state.runStatus).toBe('done')
+})
+
+test('a single-link run fetches only that link', async () => {
+  state.links = [link(1), link(2), link(3)]
+  fetchPage.mockResolvedValue(page({ listings: [listing('a')] }))
+
+  await startRun(1, 2).finished
+
+  // Every request belongs to link 2 — the other two are not in this run's checklist at all.
+  expect(fetchPage.mock.calls.map((c) => (c[0] as { id: number }).id)).toEqual(
+    fetchPage.mock.calls.map(() => 2),
+  )
+  expect(state.runLinks.get(2)).toMatchObject({ status: 'ok', parsedCount: 1 })
+  expect(state.runLinks.has(1)).toBe(false)
+  expect(state.runLinks.has(3)).toBe(false)
+  expect(state.runStatus).toBe('done')
+})
+
+// Changing a link's URL archives its listings and clears baselinedAt, so the next run is a baseline
+// that meets rows it already owns. A blind insert there breaks listings_link_external and rolls the
+// whole transaction back — losing the run, not just the row.
+test('a re-baseline revives archived rows instead of inserting over them', async () => {
+  state.links = [link(1)]
+  state.listings = [
+    {
+      id: 1,
+      linkId: 1,
+      externalId: 'a',
+      removedAt: new Date(),
+      lastRank: 0,
+      price: 100,
+    },
+  ]
+  fetchPage.mockResolvedValue(page({ listings: [listing('a'), listing('b')] }))
+
+  await startRun(1).finished
+
+  expect(state.runLinks.get(1)).toMatchObject({ status: 'ok', parsedCount: 2 })
+  expect(state.listings).toHaveLength(2)
+  // Revived, not duplicated, and back to live.
+  expect(state.listings[0]).toMatchObject({ externalId: 'a', removedAt: null })
+  // Still a baseline: seeding a search is not news.
+  expect(state.events).toEqual([])
+})
+
+test('the log records the requests, the parse and the outcome', async () => {
+  state.links = [link(1)]
+  fetchPage.mockResolvedValue(page({ listings: [listing('a')] }))
+
+  await startRun(1).finished
+
+  const log = state.logs.get(1) ?? []
+  expect(log[0]).toBe('otodom · fetching over http')
+  // The politeness wait is reported apart from the request time.
+  expect(log[1]).toMatch(
+    /^GET https:\/\/www\.otodom\.pl\S* → 200 · waited 4\.0s · 120ms · http · \d+ KB$/,
+  )
+  expect(log[2]).toBe('parsed 1 listings')
+  expect(log.at(-1)).toMatch(/^baseline: recorded 1 listings/)
+})
+
+test('a failing link records why in its own log', async () => {
+  state.links = [link(1)]
+  fetchPage.mockRejectedValue(new Error('fetch failed'))
+
+  await startRun(1).finished
+
+  expect(state.logs.get(1)?.at(-1)).toBe('error: network: fetch failed')
 })

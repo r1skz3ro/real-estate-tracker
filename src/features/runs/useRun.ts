@@ -46,7 +46,7 @@ export function useRun(projectId: number) {
     running,
     byLinkId,
     startedAt: run.data?.run.startedAt,
-    start: () => start.mutate({ data: projectId }),
+    start: () => start.mutate({ data: { projectId } }),
     starting: start.isPending,
   }
 }

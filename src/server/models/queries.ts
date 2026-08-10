@@ -1,9 +1,11 @@
 import {
   and,
+  asc,
   desc,
   eq,
   getTableColumns,
   inArray,
+  isNotNull,
   isNull,
   sql,
 } from 'drizzle-orm'
@@ -61,6 +63,29 @@ export function listLinks(projectId: number) {
     .where(eq(links.projectId, projectId))
     .orderBy(links.createdAt)
     .all()
+}
+
+export function getLink(id: number) {
+  return db.select().from(links).where(eq(links.id, id)).get()
+}
+
+// Correlated subqueries for the same reason as listProjects: the link header wants all four at once,
+// and the aliases keep `id` unambiguous inside the raw sql`` templates.
+export function linkStats(linkId: number, d = db) {
+  return d
+    .select({
+      tracked: sql<number>`(select count(*) from ${listings} li
+        where li.linkId = ${links}.id)`,
+      live: sql<number>`(select count(*) from ${listings} li
+        where li.linkId = ${links}.id and li.removedAt is null)`,
+      events: sql<number>`(select count(*) from ${events} e
+        where e.linkId = ${links}.id)`,
+      unread: sql<number>`(select count(*) from ${events} e
+        where e.linkId = ${links}.id and e.readAt is null)`,
+    })
+    .from(links)
+    .where(eq(links.id, linkId))
+    .get()
 }
 
 export function createLink(data: {
@@ -156,10 +181,90 @@ export function getRunStatus(runId: number) {
   }
 }
 
+const MAX_LOG_LINES = 200
+
+// ponytail: read-modify-write on the row's own JSON. ~15 writes per link per run on a synchronous
+// driver, and no query ever reads a log line across runs — promote to a rows table if one does.
+export function appendRunLinkLog(
+  runId: number,
+  linkId: number,
+  msg: string,
+  d = db,
+) {
+  const pair = and(eq(runLinks.runId, runId), eq(runLinks.linkId, linkId))
+  const row = d.select({ log: runLinks.log }).from(runLinks).where(pair).get()
+  const log = [...(row?.log ?? []), { at: Date.now(), msg }]
+  d.update(runLinks)
+    .set({ log: log.slice(-MAX_LOG_LINES) })
+    .where(pair)
+    .run()
+}
+
+// One link's fetch history, newest first — and its logs with it, since the log lives on the row.
+export function linkRuns(linkId: number, limit = 20, d = db) {
+  const page = d
+    .select({
+      ...getTableColumns(runLinks),
+      runStatus: runs.status,
+      runStartedAt: runs.startedAt,
+      runFinishedAt: runs.finishedAt,
+    })
+    .from(runLinks)
+    .innerJoin(runs, eq(runs.id, runLinks.runId))
+    .where(eq(runLinks.linkId, linkId))
+    .orderBy(desc(runLinks.id))
+    .limit(limit + 1)
+    .all()
+  return { runs: page.slice(0, limit), hasMore: page.length > limit }
+}
+
 // Removed rows come back too: they are still the seen-set, and a relisted id must find its own row
 // rather than insert a second one.
 export function linkListings(linkId: number) {
   return db.select().from(listings).where(eq(listings.linkId, linkId)).all()
+}
+
+export type ListingFilter = 'all' | 'live' | 'removed'
+
+// The link page's read: paged and ordered, unlike linkListings which the run needs whole. Ordered by
+// when we first saw it, then by the portal's own ordering within a batch — a baseline seeds every
+// row with the same firstSeenAt, so lastRank is what keeps "newest first" meaningful there.
+export function linkListingsPage(
+  linkId: number,
+  { limit = 20, offset = 0, filter = 'all' } = {},
+  d = db,
+) {
+  const scope =
+    filter === 'live'
+      ? isNull(listings.removedAt)
+      : filter === 'removed'
+        ? isNotNull(listings.removedAt)
+        : undefined
+
+  const { details: _details, ...columns } = getTableColumns(listings)
+
+  const page = d
+    // Every column but `details`: it is a per-portal grab bag of `unknown`, which no view renders
+    // and which a server function cannot prove serializable. It stays in the table as the archive.
+    .select(columns)
+    .from(listings)
+    .where(and(eq(listings.linkId, linkId), scope))
+    .orderBy(desc(listings.firstSeenAt), asc(listings.lastRank))
+    .limit(limit + 1)
+    .offset(offset)
+    .all()
+
+  return { listings: page.slice(0, limit), hasMore: page.length > limit }
+}
+
+// A link's URL changed, so the old search's results are no longer its seen-set. Rule 4 still holds —
+// they are archived, never deleted — and no events are written: nobody took these offers down, we
+// simply stopped looking at them.
+export function archiveLinkListings(linkId: number, at: Date, d = db) {
+  d.update(listings)
+    .set({ removedAt: at })
+    .where(and(eq(listings.linkId, linkId), isNull(listings.removedAt)))
+    .run()
 }
 
 export function insertListing(data: typeof listings.$inferInsert) {

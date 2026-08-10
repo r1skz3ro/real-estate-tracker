@@ -32,7 +32,12 @@ export function LinksCard({
             : `${links.length} of ${MAX_LINKS} saved searches.`}
         </CardDescription>
         <CardAction>
-          <RefreshButton run={run} disabled={links.length === 0} />
+          <RefreshButton
+            running={run.running}
+            starting={run.starting}
+            start={run.start}
+            disabled={links.length === 0}
+          />
         </CardAction>
       </CardHeader>
 
