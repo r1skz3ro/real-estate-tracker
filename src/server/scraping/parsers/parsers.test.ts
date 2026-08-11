@@ -21,6 +21,9 @@ const CASES: Array<{
   pageUrl: string
   expectedCount: number
   firstId: string
+  // Pinned because nothing else here would notice a wrong path: otodom shipped `/pl/ad/<slug>` for
+  // months, a route that 404s, and every assertion below passed on it.
+  firstUrl: string
   // A portal that lists another portal's offers among its own results.
   alsoAllows?: Portal
   // Only these two publish a description on the search page at all.
@@ -34,8 +37,11 @@ const CASES: Array<{
     parser: parseOtodom,
     pageUrl:
       'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski/sobotka/sulistrowice',
-    expectedCount: 19,
+    // 19 tiles, one of which is the promoted duplicate the parser drops.
+    expectedCount: 18,
     firstId: '68238693',
+    firstUrl:
+      'https://www.otodom.pl/pl/oferta/dzialka-idealna-mpzp-media-badania-poz-bud-ID4Ck05',
     expectsDescription: true,
   },
   {
@@ -45,6 +51,8 @@ const CASES: Array<{
     pageUrl: 'https://wroclaw.nieruchomosci-online.pl/szukaj.html',
     expectedCount: 40,
     firstId: '25921151',
+    firstUrl:
+      'https://przylegow.nieruchomosci-online.pl/dzialka,na-sprzedaz/25921151.html',
     expectsDescription: true,
   },
   {
@@ -53,6 +61,8 @@ const CASES: Array<{
     pageUrl: 'https://gratka.pl/mapa/nieruchomosci/dzialki-grunty',
     expectedCount: 35,
     firstId: '48341533',
+    firstUrl:
+      'https://gratka.pl/nieruchomosci/dzialka-swidnicki-swiebodzice/ob/48341533',
   },
   {
     portal: 'adresowo',
@@ -60,6 +70,8 @@ const CASES: Array<{
     pageUrl: 'https://adresowo.pl/f/dzialki/sulistrowice/g5_lod',
     expectedCount: 33,
     firstId: 'dzialka-budowlana-sobotka-sulistrowice-ul-aroniowa-v3j5b2',
+    firstUrl:
+      'https://adresowo.pl/o/dzialka-budowlana-sobotka-sulistrowice-ul-aroniowa-v3j5b2',
   },
   {
     portal: 'olx',
@@ -69,6 +81,8 @@ const CASES: Array<{
       'https://www.olx.pl/nieruchomosci/dzialki/sprzedaz/sulistrowice_143815/',
     expectedCount: 25,
     firstId: '1bB3GO',
+    firstUrl:
+      'https://www.olx.pl/d/oferta/wyjatkowo-piekna-dzialka-budowlana-w-tapadla-sleza-pensjonat-hotel-CID3-ID1bB3GO.html',
     alsoAllows: 'otodom',
   },
 ]
@@ -84,6 +98,7 @@ test.each(CASES)(
     pageUrl,
     expectedCount,
     firstId,
+    firstUrl,
     alsoAllows,
     expectsDescription,
     expectsPostedAt,
@@ -94,6 +109,7 @@ test.each(CASES)(
     expect(emptyState).toBe(false)
     // Page order is load-bearing: phase 06 reasons about position when nominating removals.
     expect(listings[0]?.externalId).toBe(firstId)
+    expect(listings[0]?.url).toBe(firstUrl)
 
     const allowed = [portal, alsoAllows].filter(Boolean)
     for (const listing of listings) {
@@ -152,6 +168,22 @@ test.each(CASES)(
     expect(listings).toHaveLength(0)
   },
 )
+
+// Otodom repeats one card per page as a promoted tile under a synthetic id (`96<realId>00067`) and
+// an `hpr/` href. Kept, it inserts a phantom listing that reappears under a new id every rotation.
+test('otodom drops the promoted duplicate tile', () => {
+  const { listings } = parseOtodom(
+    read('otodom-search'),
+    'https://www.otodom.pl/pl/wyniki/sprzedaz/dzialka/dolnoslaskie/wroclawski/sobotka/sulistrowice',
+  )
+
+  expect(listings.map((listing) => listing.externalId)).not.toContain(
+    '96823869300067',
+  )
+  expect(new Set(listings.map((listing) => listing.url)).size).toBe(
+    listings.length,
+  )
+})
 
 // Page 3 of a 86-offer search: the portal has run out of matches and starts padding, so this one
 // page carries both kinds. Without the `data-pie` filter the whole search parsed as 255 listings —

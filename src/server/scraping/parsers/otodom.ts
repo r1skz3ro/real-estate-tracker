@@ -1,3 +1,4 @@
+import * as cheerio from 'cheerio'
 import { absoluteUrl, parsePostedAt } from './util'
 import type { Parser } from './util'
 
@@ -6,6 +7,9 @@ type OtodomAddressPart = { name: string } | null
 type OtodomItem = {
   id: number
   slug: string
+  // The Next.js route template, `[lang]/ad/<slug>` — an internal route, not a URL. Only read to
+  // spot the `hpr/` prefix.
+  href?: string
   title: string
   totalPrice?: { value: number; currency: string } | null
   areaInSquareMeters: number | null
@@ -49,7 +53,25 @@ export const parseOtodom: Parser = (html, pageUrl) => {
   const data = JSON.parse(match[1] ?? '') as NextData
   const items = data.props.pageProps.data.searchAds.items
 
-  const listings = items.map((item) => {
+  // The URL is whatever the card links to, never a path we build: otodom retired `/pl/ad/<slug>`
+  // (it now 301s to `/pl/shop/…` and 404s), and __NEXT_DATA__ only carries that same dead route.
+  // Keyed by slug rather than by index so the DOM and the JSON are free to drift out of step.
+  const $ = cheerio.load(html)
+  const hrefBySlug = new Map<string, string>()
+  for (const el of $('a[data-cy="listing-item-link"]').toArray()) {
+    const href = $(el).attr('href')
+    const slug = href?.split('?')[0]?.split('/').filter(Boolean).pop()
+    if (href && slug && !hrefBySlug.has(slug)) hrefBySlug.set(slug, href)
+  }
+
+  const listings = items.flatMap((item) => {
+    // One promoted tile per page repeats a card already in the results under a synthetic id.
+    if (item.href?.startsWith('hpr/')) return []
+    // No anchor means no honest URL to store. Dropping the item leaves any row it already has
+    // untouched, at worst costing it a removal check that answers "still live".
+    const href = hrefBySlug.get(item.slug)
+    if (!href) return []
+
     const { street, city, province } = item.location.address
     const location =
       [street?.name, city?.name, province?.name].filter(Boolean).join(', ') ||
@@ -57,7 +79,7 @@ export const parseOtodom: Parser = (html, pageUrl) => {
 
     return {
       externalId: String(item.id),
-      url: absoluteUrl(`/pl/ad/${item.slug}`, pageUrl),
+      url: absoluteUrl(href, pageUrl),
       title: item.title,
       price: item.totalPrice?.value ?? null,
       currency: item.totalPrice?.currency ?? 'PLN',
@@ -82,5 +104,7 @@ export const parseOtodom: Parser = (html, pageUrl) => {
     }
   })
 
-  return { listings, emptyState: listings.length === 0 }
+  // Counted on `items`, not on `listings`: the filters above must never let a renamed anchor read
+  // as "the portal said zero".
+  return { listings, emptyState: items.length === 0 }
 }

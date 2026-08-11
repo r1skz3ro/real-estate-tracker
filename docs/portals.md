@@ -11,7 +11,7 @@ HTML the parser tests match byte-for-byte).
 
 | Portal                  | Fetch       | Extraction path                                                                                   | Empty state                           | Pagination          |
 | ----------------------- | ----------- | ------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------- |
-| otodom.pl               | HTTP        | `<script id="__NEXT_DATA__">` → `props.pageProps.data.searchAds.items`                            | `items: []`                           | `?page=N`           |
+| otodom.pl               | HTTP        | `<script id="__NEXT_DATA__">` → `props.pageProps.data.searchAds.items`, URL from `a[data-cy="listing-item-link"]` | `items: []`                           | `?page=N`           |
 | nieruchomosci-online.pl | HTTP        | ld+json `CollectionPage` → `mainEntity.offers[0].offers`                                          | ld+json present, `offers: []`         | `&p=N` appended raw |
 | gratka.pl               | HTTP        | ld+json `Product` → `offers.offers`                                                               | ld+json present, `offers: []`         | `?page=N`           |
 | adresowo.pl             | HTTP        | `#offer-list-results a[data-track="offer-link"]` → `/o/<slug>`                                    | results grid present but empty        | `_lN` path token    |
@@ -97,6 +97,20 @@ with an optional `.html` suffix — OLX's own ads carry it, Otodom cross-posts e
 The richest source: `__NEXT_DATA__` carries price, area, price/m², rooms, floor, plot area, creation
 date, private-vs-agency and full-size image URLs. `shortDescription` is truncated to ~200 chars on
 the search page; the full text lives on the detail page and is not worth a request per listing.
+
+**The listing URL is the one field `__NEXT_DATA__` cannot give you.** Its per-item `href` is the
+Next.js route _template_ — a literal `[lang]/ad/<slug>` — and that route is dead: `/pl/ad/<slug>`
+301s to `/pl/shop/<slug>/-ID/`, which answers **404**. Building the path from the slug is what the
+parser used to do, and it broke every Otodom link in the UI while making `verifyRemoved()` confirm
+_every_ removal candidate as gone on the 404. The live path is `/pl/oferta/<slug>`, and the honest
+place to read it is the card itself: `a[data-cy="listing-item-link"]`, present in the plain-HTTP
+body, matched to its item by slug. **Never rebuild the path** — otodom is free to change it again,
+and the next change should show up as a parse error, not as a page of dead links.
+
+Padding: one card per page is repeated as a **promoted tile** — `href` prefixed `hpr/`, same slug,
+a synthetic id of the form `96<realId>00067`. It is not a second offer, and it rotates, so keeping
+it inserts a fresh phantom "new" listing on most runs. Filtered on the `hpr/` prefix; `isPromoted`
+is `false` on it and is no help.
 
 ### gratka.pl
 
