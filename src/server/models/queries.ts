@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   getTableColumns,
@@ -26,6 +27,9 @@ export function listProjects(d = db) {
       // A red link on a project you rarely open is invisible without this.
       failing: sql<number>`(select count(*) from ${links} l
         where l.projectId = ${projects}.id and l.status = 'error')`,
+      // Epoch ms, not a Date: a raw column skips drizzle's timestamp mapping. fmtWhen takes both.
+      lastRunAt: sql<number | null>`(select max(lastRunAt) from ${links} l
+        where l.projectId = ${projects}.id)`,
     })
     .from(projects)
     .orderBy(projects.createdAt)
@@ -138,6 +142,26 @@ export function activeRun(projectId: number) {
     .from(runs)
     .where(and(eq(runs.projectId, projectId), eq(runs.status, 'running')))
     .get()
+}
+
+// Every run in flight with how far its checklist has got — the sidebar's live state for all
+// projects at once. A multi-project refresh creates all its run rows up front and the global fetch
+// mutex walks them one at a time, so `fetching` is what separates the one working from the queue.
+// Table names are literal inside sql``: interpolating `${runLinks.status}` renders bare "status",
+// which `runs` also has ("ambiguous column name" at runtime).
+export function activeRuns(d = db) {
+  return d
+    .select({
+      projectId: runs.projectId,
+      total: count(runLinks.id),
+      done: sql<number>`coalesce(sum(case when runLinks.status in ('ok', 'error') then 1 else 0 end), 0)`,
+      fetching: sql<number>`coalesce(sum(case when runLinks.status = 'running' then 1 else 0 end), 0)`,
+    })
+    .from(runs)
+    .leftJoin(runLinks, eq(runLinks.runId, runs.id))
+    .where(eq(runs.status, 'running'))
+    .groupBy(runs.id)
+    .all()
 }
 
 export function finishRun(id: number, status: string) {

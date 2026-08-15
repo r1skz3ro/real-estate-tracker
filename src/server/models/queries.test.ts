@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest'
 import { createDb } from './index'
 import {
+  activeRuns,
   appendRunLinkLog,
   archiveLinkListings,
   linkListingsPage,
@@ -70,6 +71,53 @@ test('listProjects counts only unread events, per project', () => {
   expect(first?.unread).toBe(2)
   expect(second?.name).toBe('B')
   expect(second?.unread).toBe(0)
+})
+
+// Same trap as above, one join further: `runs` and `runLinks` both have a `status` column, and the
+// sidebar's queued-vs-fetching split is exactly what the conditional sums decide.
+test('activeRuns reports in-flight runs only, with checklist progress', () => {
+  const db = createDb(':memory:')
+  const now = new Date()
+
+  const [a, b] = db
+    .insert(projects)
+    .values([{ name: 'A' }, { name: 'B' }])
+    .returning()
+    .all()
+  const link = (projectId: number) => ({
+    projectId,
+    url: 'https://example.com/search',
+    portal: 'gratka',
+    label: 'gratka · test',
+  })
+  const [one, two, three] = db
+    .insert(links)
+    .values([link(a!.id), link(a!.id), link(b!.id)])
+    .returning()
+    .all()
+  const [live, finished] = db
+    .insert(runs)
+    .values([
+      { projectId: a!.id, status: 'running', startedAt: now },
+      { projectId: b!.id, status: 'done', startedAt: now },
+    ])
+    .returning()
+    .all()
+  db.insert(runLinks)
+    .values([
+      { runId: live!.id, linkId: one!.id, status: 'ok' },
+      { runId: live!.id, linkId: two!.id, status: 'running' },
+      { runId: finished!.id, linkId: three!.id, status: 'ok' },
+    ])
+    .run()
+
+  expect(activeRuns(db)).toEqual([
+    { projectId: a!.id, total: 2, done: 1, fetching: 1 },
+  ])
+
+  // A project queued behind the fetch mutex has a run row but no running link yet.
+  db.update(runLinks).set({ status: 'pending' }).run()
+  expect(activeRuns(db)[0]).toMatchObject({ done: 0, fetching: 0, total: 2 })
 })
 
 // A run with zero events has to survive the grouping — dropping it is what makes a quiet week look

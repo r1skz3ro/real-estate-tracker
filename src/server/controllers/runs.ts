@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { getRunStatus } from '@/server/models/queries'
+import { MAX_SELECTED_PROJECTS } from '@/features/projects/constants'
+import { activeRuns, getRunStatus } from '@/server/models/queries'
 import { startRun } from '@/server/services/runs'
 
 // Returns immediately with the run id; the work continues in the background. A second click while
@@ -20,3 +21,13 @@ export const startRunFn = createServerFn({ method: 'POST' })
 export const getRunStatusFn = createServerFn({ method: 'GET' })
   .validator(z.number().int())
   .handler(({ data }) => getRunStatus(data))
+
+// No batching layer on purpose: every run's work goes through the process-global fetch mutex, so
+// starting several here queues them — projects run one after another, links inside one already do.
+export const startRunsFn = createServerFn({ method: 'POST' })
+  .validator(z.array(z.number().int()).min(1).max(MAX_SELECTED_PROJECTS))
+  .handler(({ data }) => data.map((projectId) => startRun(projectId).runId))
+
+export const activeRunsFn = createServerFn({ method: 'GET' }).handler(() =>
+  activeRuns(),
+)

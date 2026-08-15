@@ -17,8 +17,9 @@ on the project page.
 
 ## Gotchas
 
-- `schema.ts` is imported by `@/server/controllers/projects.ts`. Keep it dependency-free apart from
-  zod: the browser imports it too, so a stray server import there breaks hydration.
+- `schema.ts` is imported by `@/server/controllers/projects.ts`, and `constants.ts`
+  (`MAX_SELECTED_PROJECTS`) by `@/server/controllers/runs.ts`. Keep both dependency-free apart from
+  zod: the browser imports them too, so a stray server import there breaks hydration.
 - Every project write invalidates the **router**, not a query key — the sidebar's unread and
   failing counts come from the root loader, not from React Query.
 - `ProjectHeader` uses react-hook-form's `values` rather than `defaultValues`: the route component

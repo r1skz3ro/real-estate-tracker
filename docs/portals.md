@@ -9,13 +9,13 @@ HTML the parser tests match byte-for-byte).
 
 ## Summary
 
-| Portal                  | Fetch       | Extraction path                                                                                   | Empty state                           | Pagination          |
-| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------- |
+| Portal                  | Fetch       | Extraction path                                                                                                   | Empty state                           | Pagination          |
+| ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------- |
 | otodom.pl               | HTTP        | `<script id="__NEXT_DATA__">` → `props.pageProps.data.searchAds.items`, URL from `a[data-cy="listing-item-link"]` | `items: []`                           | `?page=N`           |
-| nieruchomosci-online.pl | HTTP        | ld+json `CollectionPage` → `mainEntity.offers[0].offers`                                          | ld+json present, `offers: []`         | `&p=N` appended raw |
-| gratka.pl               | HTTP        | ld+json `Product` → `offers.offers`                                                               | ld+json present, `offers: []`         | `?page=N`           |
-| adresowo.pl             | HTTP        | `#offer-list-results a[data-track="offer-link"]` → `/o/<slug>`                                    | results grid present but empty        | `_lN` path token    |
-| olx.pl                  | **browser** | first `[data-testid="listing-grid"]` → `[data-cy="l-card"]` → `a[href*="/oferta/"]` → `-ID<code>` | `[data-testid="total-count"]` reads 0 | `?page=N`           |
+| nieruchomosci-online.pl | HTTP        | ld+json `CollectionPage` → `mainEntity.offers[0].offers`                                                          | ld+json present, `offers: []`         | `&p=N` appended raw |
+| gratka.pl               | HTTP        | ld+json `Product` → `offers.offers`                                                                               | ld+json present, `offers: []`         | `?page=N`           |
+| adresowo.pl             | HTTP        | `#offer-list-results a[data-track="offer-link"]` → `/o/<slug>`                                                    | results grid present but empty        | `_lN` path token    |
+| olx.pl                  | **browser** | first `[data-testid="listing-grid"]` → `[data-cy="l-card"]` → `a[href*="/oferta/"]` → `-ID<code>`                 | `[data-testid="total-count"]` reads 0 | `?page=N`           |
 
 Browser `ready` selectors (what the Playwright path waits for before reading the DOM) are in
 `PORTALS` in `src/server/scraping/portals.ts`.

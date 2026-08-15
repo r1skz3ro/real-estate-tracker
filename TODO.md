@@ -34,6 +34,8 @@
 - The Refresh button is in loading state for all proejct if ir fetches links for any project. It should be project-independent. Looks like its only button state, because other project are not being updated. I wonder if thats some sort of safe mechanism to avoid too many requests to one page from other projects, or this is a bug?
 - Hiding left side menu animations is not smooth.
 - Option to select all the project from left menu to be refreshed, but no more than 5. The refresh should happen one by one, not in parallel to not overload the sites with traffic.
+- there should be also filtering by (new/removed/price_change)
+- prevent mac from sleep during refresh.
 
 ## Link page
 
@@ -41,6 +43,7 @@
 - If i expand a section in logs history then its content overlaps other sections. (shadcn accordion component)
 - Option to stop the fetching process for a link. It should indicate that its fetching but next to it there should be a stop button.
 - Also there are cases when fetching is happening and computer goest to sleep or i close a lid. Then it looks like app is stuck in fetching mode. There should be some sort of timeout or error handling for that case. For example the process of fetching given link is interrupted and it should be indicated in the link status and in the logs that fetching was interrupted. So user can refresh again.
+- there should be also filtering by (new/removed/price_change)
 
 ### Misc:
 
