@@ -44,6 +44,7 @@
 - Option to stop the fetching process for a link. It should indicate that its fetching but next to it there should be a stop button.
 - Also there are cases when fetching is happening and computer goest to sleep or i close a lid. Then it looks like app is stuck in fetching mode. There should be some sort of timeout or error handling for that case. For example the process of fetching given link is interrupted and it should be indicated in the link status and in the logs that fetching was interrupted. So user can refresh again.
 - there should be also filtering by (new/removed/price_change)
+- add back arrow.
 
 ### Misc:
 

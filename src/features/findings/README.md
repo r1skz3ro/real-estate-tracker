@@ -5,8 +5,8 @@ The changes timeline: what each run found, grouped by run, newest first, with re
 ## Belongs here
 
 `Findings` (container + filters), `RunSection`, `EventCard`, the query/mutation hooks, the
-`useAutoRead` observer, and `summarize.ts` — filtering, portal lists, counts and the price-drop
-test as pure functions.
+`useAutoRead` observer, and `summarize.ts` — filtering (type, portal, price range), portal lists,
+counts and the price-drop test as pure functions.
 
 ## Doesn't belong here
 
@@ -23,3 +23,6 @@ Starting a refresh (`features/runs`) and the link rows above the timeline (`feat
   it cannot fire twice while the invalidated query is in flight.
 - Thumbnails are hotlinked and some portals reject the referer. A broken image is expected; it
   falls back rather than retrying or proxying.
+- The price range filters on the listing's _current_ price, and a bound hides listings with no price
+  at all ("cena do negocjacji") — they can't answer a budget question. The preset dropdown is a
+  native `<datalist>`, so any number can still be typed.

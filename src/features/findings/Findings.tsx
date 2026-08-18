@@ -7,6 +7,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { fmtPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { RunSection } from './RunSection'
 import {
@@ -19,6 +21,8 @@ import {
 import { TYPE_FILTERS } from './types'
 import { useFindings, useMarkProjectRead, useMarkRunRead } from './useFindings'
 import type { Filters } from './summarize'
+
+const PRESETS = Array.from({ length: 21 }, (_, i) => i * 50_000)
 
 export function Findings({ projectId }: { projectId: number }) {
   const [filters, setFilters] = useState<Filters>(NO_FILTER)
@@ -71,6 +75,24 @@ export function Findings({ projectId }: { projectId: number }) {
               ))}
             </>
           )}
+
+          <span className="mx-1 h-4 w-px bg-border" />
+          <PriceInput
+            placeholder="from"
+            value={filters.min}
+            onChange={(min) => setFilters((f) => ({ ...f, min }))}
+          />
+          <span className="text-xs text-muted-foreground">–</span>
+          <PriceInput
+            placeholder="to"
+            value={filters.max}
+            onChange={(max) => setFilters((f) => ({ ...f, max }))}
+          />
+          <datalist id="price-presets">
+            {PRESETS.map((p) => (
+              <option key={p} value={p} label={fmtPrice(p)} />
+            ))}
+          </datalist>
         </CardContent>
       )}
 
@@ -135,5 +157,30 @@ function Filter({
     >
       {children}
     </Button>
+  )
+}
+
+function PriceInput({
+  placeholder,
+  value,
+  onChange,
+}: {
+  placeholder: string
+  value: number | null
+  onChange: (v: number | null) => void
+}) {
+  return (
+    <Input
+      list="price-presets"
+      type="number"
+      min={0}
+      step={50_000}
+      placeholder={placeholder}
+      className="h-6 w-28 px-2 text-xs md:text-xs"
+      value={value ?? ''}
+      onChange={(e) =>
+        onChange(e.target.value === '' ? null : e.target.valueAsNumber)
+      }
+    />
   )
 }
