@@ -28,8 +28,6 @@
 
 ## Common listing
 
-- There still should be common listing list, below links similar to what we haveright now.
-- initial fetch should list 10 last listings per link, so when link is added user is aware that it works. There should be information in that first section that this is initial fetch and shows only 10 listings x number oif links.
 - There should be some separate tab inside the project to list all stored ever links from db.
 - The Refresh button is in loading state for all proejct if ir fetches links for any project. It should be project-independent. Looks like its only button state, because other project are not being updated. I wonder if thats some sort of safe mechanism to avoid too many requests to one page from other projects, or this is a bug?
 - Hiding left side menu animations is not smooth.

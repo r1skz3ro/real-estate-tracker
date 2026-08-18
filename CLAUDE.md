@@ -161,7 +161,11 @@ whole theme.
   dark-appropriate shades directly (`emerald-500`), not light-mode pairs.
 - `src/components/ui/` is CLI-generated (`pnpm dlx shadcn@latest add <name>`) — add only what's
   needed, not a bulk install. Hand-edits must survive a re-add: the AlertDialog overlay is bumped
-  to `bg-black/60` (default `bg-black/10` is invisible on a dark background).
+  to `bg-black/60` (default `bg-black/10` is invisible on a dark background), and `tabs`,
+  `scroll-area`, `separator` have their shipped `data-horizontal:`/`data-vertical:` variants
+  rewritten to `data-[orientation=…]:` — Tailwind compiles the shorthand to `[data-horizontal]`,
+  an attribute nothing renders, so those rules were dead (tabs laid out sideways, invisible
+  scrollbar thumb).
 - Use `cn()` from `@/lib/utils` for any conditional/merged class string.
 
 ## Dependency policy
