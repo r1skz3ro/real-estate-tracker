@@ -4,6 +4,7 @@ import {
   activeRuns,
   appendRunLinkLog,
   archiveLinkListings,
+  archiveProject,
   linkListingsPage,
   linkRuns,
   linkStats,
@@ -71,6 +72,30 @@ test('listProjects counts only unread events, per project', () => {
   expect(first?.unread).toBe(2)
   expect(second?.name).toBe('B')
   expect(second?.unread).toBe(0)
+})
+
+// Rule 4: a real DELETE here cascades into listings, which have to stay exportable forever. The
+// second assertion is the one that fails if anyone puts the hard delete back.
+test('archiveProject hides the project but keeps its links', () => {
+  const db = createDb(':memory:')
+  const [a] = db
+    .insert(projects)
+    .values([{ name: 'A' }, { name: 'B' }])
+    .returning()
+    .all()
+  db.insert(links)
+    .values({
+      projectId: a!.id,
+      url: 'https://example.com/search',
+      portal: 'gratka',
+      label: 'gratka · test',
+    })
+    .run()
+
+  archiveProject(a!.id, db)
+
+  expect(listProjects(db).map((p) => p.name)).toEqual(['B'])
+  expect(db.select().from(links).all()).toHaveLength(1)
 })
 
 // Same trap as above, one join further: `runs` and `runLinks` both have a `status` column, and the

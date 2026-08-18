@@ -1,16 +1,34 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
+import { Trash2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardFooter, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { updateProjectSchema } from './schema'
-import { useUpdateProject } from './useProjects'
+import { useDeleteProject, useUpdateProject } from './useProjects'
 import type { Project } from './types'
 import type { z } from 'zod'
 
-export function ProjectHeader({ project }: { project: Project }) {
+export function ProjectHeader({
+  project,
+  linkCount,
+}: {
+  project: Project
+  linkCount: number
+}) {
   const form = useForm<z.infer<typeof updateProjectSchema>>({
     resolver: standardSchemaResolver(updateProjectSchema),
     // `values` (not `defaultValues`) so switching project re-syncs the inputs — the route component
@@ -22,6 +40,7 @@ export function ProjectHeader({ project }: { project: Project }) {
     },
   })
   const save = useUpdateProject()
+  const remove = useDeleteProject()
   const { errors } = form.formState
 
   // Same reason as `values` above: without a remount, the previous project's "Saved" flash and
@@ -73,6 +92,41 @@ export function ProjectHeader({ project }: { project: Project }) {
               {save.error.message}
             </span>
           )}
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              {/* type="button": inside the form, a trigger without it submits the name field. */}
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="ml-auto"
+                disabled={remove.isPending}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes the project and its {linkCount} search{' '}
+                  {linkCount === 1 ? 'link' : 'links'} from the app. The
+                  recorded listings and history stay in the database.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() => remove.mutate({ data: project.id })}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardFooter>
       </form>
     </Card>

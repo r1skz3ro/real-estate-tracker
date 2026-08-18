@@ -5,8 +5,8 @@ import {
   updateProjectSchema,
 } from '@/features/projects/schema'
 import {
+  archiveProject,
   createProject,
-  deleteProject,
   getProject,
   listProjects,
   updateProject,
@@ -34,4 +34,4 @@ export const updateProjectFn = createServerFn({ method: 'POST' })
 
 export const deleteProjectFn = createServerFn({ method: 'POST' })
   .validator(z.number().int())
-  .handler(({ data }) => deleteProject(data))
+  .handler(({ data }) => archiveProject(data))

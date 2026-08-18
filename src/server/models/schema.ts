@@ -26,6 +26,8 @@ export const projects = sqliteTable('projects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
   description: text('description'),
+  // Deleting a project only stamps this — its listings are the permanent archive (rule 4).
+  archivedAt: integer('archivedAt', { mode: 'timestamp_ms' }),
   createdAt: createdAt(),
 })
 

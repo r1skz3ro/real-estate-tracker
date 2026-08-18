@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/card'
 import { Findings } from '@/features/findings/Findings'
 import { LinksCard } from '@/features/links/LinksCard'
-import { DangerZone } from '@/features/projects/DangerZone'
 import { ProjectHeader } from '@/features/projects/ProjectHeader'
 import { useRun } from '@/features/runs/useRun'
 import { listLinksFn } from '@/server/controllers/links'
@@ -36,10 +35,9 @@ function ProjectDetail() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <ProjectHeader project={project} />
+      <ProjectHeader project={project} linkCount={links.length} />
       <LinksCard projectId={project.id} links={links} run={run} />
       <Findings projectId={project.id} />
-      <DangerZone project={project} linkCount={links.length} />
     </div>
   )
 }

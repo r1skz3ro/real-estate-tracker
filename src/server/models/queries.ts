@@ -32,6 +32,7 @@ export function listProjects(d = db) {
         where l.projectId = ${projects}.id)`,
     })
     .from(projects)
+    .where(isNull(projects.archivedAt))
     .orderBy(projects.createdAt)
     .all()
 }
@@ -56,8 +57,13 @@ export function updateProject(
     .get()
 }
 
-export function deleteProject(id: number) {
-  db.delete(projects).where(eq(projects.id, id)).run()
+// ponytail: hidden, not deleted — a real DELETE cascades into listings, which rule 4 keeps
+// exportable forever. There is no unarchive UI; flip the column by hand if one has to come back.
+export function archiveProject(id: number, d = db) {
+  d.update(projects)
+    .set({ archivedAt: new Date() })
+    .where(eq(projects.id, id))
+    .run()
 }
 
 export function listLinks(projectId: number) {

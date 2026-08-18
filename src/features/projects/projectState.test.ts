@@ -6,6 +6,7 @@ const project = (over: Partial<ProjectSummary> = {}): ProjectSummary => ({
   id: 1,
   name: 'Wrocław działki',
   description: null,
+  archivedAt: null,
   createdAt: new Date(),
   unread: 0,
   failing: 0,
