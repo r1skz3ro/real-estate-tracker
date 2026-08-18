@@ -16,6 +16,8 @@
     "db:migrate": "mkdir -p data && drizzle-kit migrate"
   },
   "dependencies": {
+    "@dnd-kit/helpers": "^0.5.0",
+    "@dnd-kit/react": "^0.5.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@hookform/resolvers": "^5.7.1",
     "@tailwindcss/vite": "^4.1.18",

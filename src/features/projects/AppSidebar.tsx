@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Link, useMatchRoute } from '@tanstack/react-router'
-import { Check } from 'lucide-react'
+import { DragDropProvider } from '@dnd-kit/react'
+import { useSortable } from '@dnd-kit/react/sortable'
+import { move } from '@dnd-kit/helpers'
+import { Check, GripVertical } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,11 +21,13 @@ import { cn } from '@/lib/utils'
 import { MAX_SELECTED_PROJECTS } from './constants'
 import { NewProjectDialog } from './NewProjectDialog'
 import { projectState } from './projectState'
+import { useProjectOrder } from './useProjectOrder'
 import { useProjectRuns } from './useProjectRuns'
 import type { ProjectRun, ProjectSummary } from './types'
 
 export function AppSidebar({ projects }: { projects: Array<ProjectSummary> }) {
   const { running, starting, start, byProjectId } = useProjectRuns()
+  const { ordered, reorder } = useProjectOrder(projects)
   // One value, not a boolean plus a set: null is "selection mode off".
   const [selected, setSelected] = useState<Set<number> | null>(null)
 
@@ -34,7 +39,6 @@ export function AppSidebar({ projects }: { projects: Array<ProjectSummary> }) {
     })
 
   return (
-    // Not collapsible="icon": the menu items are text-only, so a project would collapse to nothing.
     <Sidebar>
       <SidebarHeader className="gap-2 pl-4">
         <div className="flex flex-row items-center justify-between gap-2">
@@ -87,18 +91,30 @@ export function AppSidebar({ projects }: { projects: Array<ProjectSummary> }) {
               No projects yet
             </p>
           ) : (
-            <SidebarMenu>
-              {projects.map((project) => (
-                <ProjectRow
-                  key={project.id}
-                  project={project}
-                  run={byProjectId.get(project.id)}
-                  selected={selected?.has(project.id) ?? null}
-                  atCap={(selected?.size ?? 0) >= MAX_SELECTED_PROJECTS}
-                  toggle={() => toggle(project.id)}
-                />
-              ))}
-            </SidebarMenu>
+            <DragDropProvider
+              onDragOver={(event) =>
+                reorder(
+                  move(
+                    ordered.map((p) => p.id),
+                    event,
+                  ),
+                )
+              }
+            >
+              <SidebarMenu>
+                {ordered.map((project, index) => (
+                  <ProjectRow
+                    key={project.id}
+                    project={project}
+                    index={index}
+                    run={byProjectId.get(project.id)}
+                    selected={selected?.has(project.id) ?? null}
+                    atCap={(selected?.size ?? 0) >= MAX_SELECTED_PROJECTS}
+                    toggle={() => toggle(project.id)}
+                  />
+                ))}
+              </SidebarMenu>
+            </DragDropProvider>
           )}
         </SidebarGroup>
       </SidebarContent>
@@ -108,15 +124,16 @@ export function AppSidebar({ projects }: { projects: Array<ProjectSummary> }) {
   )
 }
 
-// `selected` is null outside selection mode — the row is a link then, and a toggle otherwise.
 function ProjectRow({
   project,
+  index,
   run,
   selected,
   atCap,
   toggle,
 }: {
   project: ProjectSummary
+  index: number
   run: ProjectRun | undefined
   selected: boolean | null
   atCap: boolean
@@ -124,6 +141,13 @@ function ProjectRow({
 }) {
   const matchRoute = useMatchRoute()
   const { dot, text, tone } = projectState(project, run)
+  // Disabled in selection mode, not just handle-less: without a handle element the whole row
+  // becomes the drag activator, and that gesture would fight the checkbox.
+  const { ref, handleRef, isDragging } = useSortable({
+    id: project.id,
+    index,
+    disabled: selected !== null,
+  })
 
   const body = (
     <>
@@ -134,7 +158,6 @@ function ProjectRow({
             selected && 'border-primary bg-primary text-primary-foreground',
           )}
         >
-          {/* `!`: the button's own [&_svg]:size-4 outranks a plain size-3 on the icon. */}
           {selected && <Check className="size-3!" />}
         </span>
       )}
@@ -161,12 +184,21 @@ function ProjectRow({
   )
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem ref={ref} className={cn(isDragging && 'opacity-50')}>
+      {selected === null && (
+        <button
+          ref={handleRef}
+          type="button"
+          aria-label={`Reorder ${project.name}`}
+          className="absolute top-1/2 left-0 flex size-6 -translate-y-1/2 cursor-grab items-center justify-center text-muted-foreground opacity-0 group-hover/menu-item:opacity-100 focus-visible:opacity-100"
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+      )}
       {selected === null ? (
         <SidebarMenuButton
           asChild
-          // h-auto: every size variant is a fixed height, and these rows are two lines.
-          className="h-auto"
+          className="h-auto pl-6"
           isActive={
             !!matchRoute({
               to: '/projects/$projectId',

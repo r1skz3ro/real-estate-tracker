@@ -66,15 +66,6 @@ Reference a model or service at module scope in a controller and better-sqlite3 
 into the browser, killing hydration. `pnpm build` still succeeds when this breaks — the check that
 catches it is `grep -rE "better.sqlite3|playwright" dist/client/`, which must find nothing.
 
-## Build plan
-
-This repo is built phase-by-phase from `phases/README.md` (index) and `phases/NN-*.md` (one phase
-each), in order — don't skip ahead or build phase N+1 plumbing while implementing phase N. **Read
-the relevant phase file in full before implementing it**: each one carries verified specifics
-(exact JSON paths, selectors, regexes) not guessable from the codebase, plus the actual "Done when"
-acceptance criteria. Check `git log` / existing `src/` dirs for what's actually done — don't trust
-a progress summary in this file, it goes stale.
-
 ## Non-negotiable domain rules
 
 From live reconnaissance against the real portals during planning. They look simplifiable; don't —
@@ -177,12 +168,7 @@ as usual. The one deliberate exception already in this repo is the shadcn/ui ado
 dependency is genuinely needed, check peer compatibility with what's pinned (React 19, Vite 8,
 TypeScript 6, Tailwind 4, drizzle-orm 0.45) and pin with `^`, not `latest`.
 
-## Comments policy
-
-Do not add comments unless necessary — code should be self-explanatory; if you feel the urge,
-consider refactoring instead. If you do add one, make it clear, concise, and non-obvious (don't
-state what the code already expresses).
-
 ## DONT DO
 
 - Don't modify directly original shadcn components inside src/components/ui folder.
+- Don't add a new comments. Code should be self-explanatory
