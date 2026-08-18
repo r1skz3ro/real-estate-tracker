@@ -182,3 +182,7 @@ TypeScript 6, Tailwind 4, drizzle-orm 0.45) and pin with `^`, not `latest`.
 Do not add comments unless necessary — code should be self-explanatory; if you feel the urge,
 consider refactoring instead. If you do add one, make it clear, concise, and non-obvious (don't
 state what the code already expresses).
+
+## DONT DO
+
+- Don't modify directly original shadcn components inside src/components/ui folder.

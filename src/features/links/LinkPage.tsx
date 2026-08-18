@@ -36,7 +36,7 @@ export function LinkPage({
         run={run}
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue="overview" className="flex flex-col">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="listings">Listings</TabsTrigger>
